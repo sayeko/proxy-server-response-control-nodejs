@@ -3,4 +3,4 @@ Proxy Server with UI dashboard to control result of response only with configure
 
 # Basic Architecture Flow
 
-![basic-flow](https://user-images.githubusercontent.com/23419176/49794625-adc67980-fd40-11e8-9e94-59e836bf2da2.png)
+![basic-flow](https://user-images.githubusercontent.com/23419176/49819380-f18ba400-fd7d-11e8-950e-bfe199fa6385.png)
