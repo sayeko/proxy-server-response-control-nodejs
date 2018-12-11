@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <meta http-equiv="X-UA-Compatible" content="ie=edge">
+   <title>Proxy</title>
+
+   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.css">
+   <link rel="stylesheet" href="/styles.css">
+</head>
+
+<body>
+   <div class="root">
+
+      <h2 class="ui center aligned icon header">
+         <i class="circular server icon"></i>
+         Proxy KuKu
+      </h2>
+
+      <div class="ui styled accordion">
+         <div class="title">
+            <i class="dropdown icon"></i>
+            Availble Masks Proxy
+         </div>
+         <div class="content availbleMaskProxy">
+            <ul class="transition hidden ">
+            </ul>
+
+         </div>
+      </div>
+
+
+      
+
+      <div class="form-wrapper">
+         <form class="ui form form-container">
+            <div class="field mask-id-container">
+               <input id="mask-id-input" type="text" placeholder="Mask Id">
+            </div>
+            
+            <div class="ui labeled input">
+               <div class="ui dropdown label">
+                  <div class="text" id="dropdown-menu">http://</div>
+                  <i class="dropdown icon"></i>
+                  <div class="menu">
+                     <div class="item">http://</div>
+                     <div class="item">https://</div>
+                  </div>
+               </div>
+               <input id="input-end-mask" type="text" placeholder="End Point">
+            </div>
+            <div class="button-apply">
+               <button class="ui button button-container" type="submit">Apply</button>
+            </div>
+         </form>
+      </div>
+
+
+      <div class="ui icon input">
+         <input type="text" placeholder="Search...">
+         <i class="circular search link icon"></i>
+      </div>
+
+      <div class="request-info-wrapper">
+         <div id="requestInfoContainer" class="ui styled fluid accordion request-info">
+         </div>
+      </div>
+
+   </div>
+
+
+   <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.js"></script>
+
+   <script>
+      var proxyRequestTrace = new Map();
+
+      $(document).ready(function () {
+         // Initialization handlers.
+         $('.ui.accordion').accordion();
+         $('.ui.dropdown').dropdown();
+      });
+
+      function random(rand) {
+         return Math.floor((Math.random() * rand) + 1);
+      }
+
+      function availbleMaskProxy(proxyObj) {
+         $(".availbleMaskProxy ul").append(`<li> Mask Id - ${proxyObj.maskId}, End Point - <a href="${proxyObj.endPoint}">${proxyObj.endPoint}<a/> </li>`);
+         console.log(proxyObj);
+      }
+
+      $(".form").submit((event) => {
+         event.preventDefault();
+         let maskId = $("#mask-id-input").val();
+         let endPoint = $("#dropdown-menu").prop('selected', true) + $("#input-end-mask").val();
+         let proxyObj = {
+            maskId: maskId,
+            endPoint: endPoint
+         }
+         if (maskId != '' && endPoint != '') {
+            availbleMaskProxy(proxyObj);
+         }
+         console.log(maskId, endPoint);
+      });
+
+      function createFakeRequestInfoData() {
+         return {
+            url: '/',
+            method: random(2) === 1 ? 'GET' : 'POST',
+            info: `Random request Info ... ${random(10)}`,
+            status: random(600),
+            timestamp: Date.now()
+         }
+      }
+
+      function getStatusColor(status) {
+         if (status >= 200 && status < 300) {
+            return 'green';
+         }
+
+         if (status >= 300 && status < 400) {
+            return 'yellow';
+         }
+
+         if (status >= 400 && status < 600) {
+            return 'red';
+         }
+
+         return 'grey';
+      }
+
+      function createRequestInfoContainer(metaInfo) {
+         var parentRequestInfo = document.createElement('div');
+
+         let requestInfoTemplate = (`
+         <div id="${metaInfo.url}" class="title">
+            <div class="ui circular labels">
+               <a class="ui label horizontal">
+               </a>
+            </div>
+            <i class="dropdown icon"></i>
+            ${metaInfo.url}
+         </div>
+         <div class="content">
+         </div>
+         `);
+
+         parentRequestInfo.innerHTML = requestInfoTemplate;
+
+         return requestInfoTemplate;
+      }
+
+      function createRequestInfoData(requestInfo) {
+         var parentRequestInfo = document.createElement('div');
+
+         var requestInfoTemplate = (`
+         <div class="title">
+            <div class="ui horizontal">${new Date(requestInfo.timestamp).toLocaleTimeString()}</div>
+            <div class="ui horizontal ${getStatusColor(requestInfo.status)} label">${requestInfo.method}</div>
+            <i class="dropdown icon"></i>
+         </div>
+         <div class="content">
+            <p>${requestInfo.info}</p>
+         </div>
+         `);
+
+         parentRequestInfo.innerHTML = requestInfoTemplate;
+
+         return parentRequestInfo;
+      }
+
+      var proxyRequestTraceRef = $('#requestInfoContainer');
+
+      setInterval(() => {
+         let newProxyTrace = createFakeRequestInfoData();
+
+         if (!proxyRequestTrace.has(newProxyTrace.url)) {
+            proxyRequestTrace.set(newProxyTrace.url, []);
+
+            proxyRequestTraceRef.append(createRequestInfoContainer(newProxyTrace));
+         }
+
+         let traceLogByUrlStack = proxyRequestTrace.get(newProxyTrace.url);
+
+         traceLogByUrlStack.push(newProxyTrace);
+
+         proxyRequestTraceRef.find(`#\\${newProxyTrace.url} .circular .label`).text(traceLogByUrlStack.length);
+         proxyRequestTraceRef.find(`#\\${newProxyTrace.url} ~ .content`).prepend(createRequestInfoData(newProxyTrace));
+
+      }, 30000);
+   </script>
+</body>
+
+</html>
