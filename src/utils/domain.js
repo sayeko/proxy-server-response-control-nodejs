@@ -1,4 +1,4 @@
-export const extractSubDomain = (host) => {
+exports.concatSubDomainsCamelCase = (host) => {
    let domainIncludeSubDomains = host.split('.');
 
    // We could not find any sub domain.
@@ -30,4 +30,16 @@ export const extractSubDomain = (host) => {
    let subDomainReference = camelCaseSubDomain.join('');
 
    return subDomainReference;
+}
+
+exports.handleCrossOrigin = (response) => {
+   const headers = {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PUT',
+      'Access-Control-Allow-Headers': 'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+      /** add other headers too */
+   };
+
+   response.writeHead(204, headers);
+   response.end();
 }
