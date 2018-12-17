@@ -1,7 +1,9 @@
 const sendRequest = require('request');
-const { handleCrossOrigin } = require('./utils/domain');
 const url = require('url');
 const uuidv1 = require('uuid/v1');
+const path = require('path');
+const { handleCrossOrigin } = require('./utils/domain');
+const { createDirectory } = require('./utils/filesystem');
 
 const { Transform } = require('stream');
 
@@ -91,32 +93,90 @@ exports.onProxyRequest = (request, response) => {
     // identifiy the request with random timestamp id.
     request.id = uuidv1();
 
+    if (request.headers['x-proxy-ping']) {
+        response.statusCode = 200;
+        response.end('pong!');
+    }
+
+    if (request.url === '/rule') {
+        switch (request.method) {
+            case 'POST':
+                break;
+            case 'GET':
+                break;
+            case 'PUT':
+                break;
+            case 'DELETE':
+                break;
+            default:
+                break;
+        }
+
+        response.end();
+    }
+
     try {
-        const requestURL = url.parse(request.url, true);
-        const maskId = request.headers['x-proxy-maskid'];
+        const mirrorUrl = request.headers['x-proxy-mirror'];
+        const clientId = request.headers['x-proxy-clientid'];
 
-        if (proxyMaskRules.has(maskId)) {
-
-            let proxyMaskRule = proxyMaskRules.get(maskId);
-
-            if (proxyMaskRule.pathRules.has(requestURL.pathname)) {
-
-                let proxyMaskPathRule = proxyMaskRule.pathRules.get(requestURL.pathname);
-
-                console.groupEnd();
-
-                response.end(JSON.stringify(proxyMaskPathRule.jsonResult));
-            } else {
-                return sendProxyRequest(proxyMaskRule.endpoint, request, response);
-            }
-
-        } else {
+        if (!mirrorUrl || !profileId) {
             throw ({
                 errorCode: 1,
                 statusCode: 400,
-                description: `No found configured mask id ${maskId} been found`
+                description: `Cannot proxy request without proxy mirror url: ${mirrorUrl ? mirrorUrl : 'N/A'} or client id ${profileId ? profileId : 'N/A'}`
             });
         }
+
+        const parsedMirrorUrl = url.parse(mirrorUrl, true);
+        // check if we have a client
+        // No?, create one.
+        // Yes?, check if we have there a rule that relate to current path.
+        // No?, continue to remote without modify not the response and the not the request.
+        // Yes?, use the rule transform and receive to modify the results.
+
+        const rootPath = path.dirname(require.main.filename || process.mainModule.filename);
+        const clientIdPath = path.join(rootPath, clientId);
+
+        createDirectory(clientIdPath)
+            .then(() => {
+                fs.createReadStream(path.join(rootPath, `${parsedMirrorUrl.path.replace(/\//g,'.')}.json`));
+            })
+            .catch((error) => {
+                const additionalErrorParams = {
+                    statusCode: 500,
+                    description: 'Server Error'
+                }
+
+                const responseError = Object.assign({}, additionalErrorParams, error);
+
+                throw responseError;
+            });
+
+
+        return sendProxyRequest(mirrorUrl, request, response);
+
+        // if (proxyMaskRules.has(maskId)) {
+
+        //     let proxyMaskRule = proxyMaskRules.get(maskId);
+
+        //     if (proxyMaskRule.pathRules.has(requestURL.pathname)) {
+
+        //         let proxyMaskPathRule = proxyMaskRule.pathRules.get(requestURL.pathname);
+
+        //         console.groupEnd();
+
+        //         response.end(JSON.stringify(proxyMaskPathRule.jsonResult));
+        //     } else {
+        //         return sendProxyRequest(proxyMaskRule.endpoint, request, response);
+        //     }
+
+        // } else {
+        //     throw ({
+        //         errorCode: 1,
+        //         statusCode: 400,
+        //         description: `No found configured mask id ${maskId} been found`
+        //     });
+        // }
     } catch (error) {
         console.error(JSON.stringify(error));
         console.groupEnd();
