@@ -1,0 +1,1 @@
+{"id":"copycat.proxy.idan","pathUrl":"copycat/proxy/idan","isDemo":false,"enable":true,"sendTransformRequest":"function transform(msg) {\n  return idan; \n}","receiveTransformRespons":"function transform(msg) {\n  return msg; \n}"}

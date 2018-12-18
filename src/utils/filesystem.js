@@ -6,8 +6,21 @@ exports.createDirectory = (path) => {
             if (error && error.code !== 'EEXIST') {
                 reject(error);
             } else {
-                resolve();
+                resolve(path);
             }
+        });
+    });
+}
+
+exports.writeFile = (path, content) => {
+    return new Promise((resolve, reject) => {
+        fs.writeFile(`${path}.json`, content, (err) => {
+            if (err) {
+                console.error('Could not create/write file %s', path, err);
+                return reject(err)
+            }
+
+            resolve();
         });
     });
 }

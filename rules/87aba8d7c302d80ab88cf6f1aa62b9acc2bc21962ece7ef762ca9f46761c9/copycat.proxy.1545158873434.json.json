@@ -1,0 +1,1 @@
+{"id":"copycat.proxy.1545158873434","pathUrl":"copycat/proxy/1545158873434","isDemo":false,"enable":true,"sendTransformRequest":"function transform(msg) {\n  return msg; \n}","receiveTransformRespons":"function transform(msg) {\n  return msg; \n}"}
