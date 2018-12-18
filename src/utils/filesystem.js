@@ -14,13 +14,37 @@ exports.createDirectory = (path) => {
 
 exports.writeFile = (path, content) => {
     return new Promise((resolve, reject) => {
-        fs.writeFile(`${path}.json`, content, (err) => {
+        fs.writeFile(path, content, (err) => {
             if (err) {
                 console.error('Could not create/write file %s', path, err);
                 return reject(err)
             }
 
-            resolve();
+            resolve(content);
+        });
+    });
+}
+
+exports.getAllFilesFromDirectory = (path) => {
+    return new Promise((resolve, reject) => {
+        fs.readdir(path, (err, files) => {
+            if (err) {
+                return reject(err);
+            }
+
+            resolve(files);
+        })
+    });
+}
+
+exports.readFile = (path) => {
+    return new Promise((resolve, reject) => {
+        fs.readFile(path, (err, data) => {
+            if (err) {
+                return reject(err);
+            }
+
+            resolve(data);
         });
     });
 }
