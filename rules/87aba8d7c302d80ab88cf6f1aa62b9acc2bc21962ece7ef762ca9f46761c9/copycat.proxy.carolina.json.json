@@ -1,1 +1,0 @@
-{"id":"copycat.proxy.carolina","pathUrl":"copycat/proxy/carolina","isDemo":false,"enable":true,"sendTransformRequest":"function transform(msg) {\n  return idan; \n}","receiveTransformRespons":"function transform(msg) {\n  return msg; \n}"}
