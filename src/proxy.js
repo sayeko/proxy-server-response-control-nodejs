@@ -38,7 +38,6 @@ const progress = () => {
     });
 }
 
-
 const processPost = (request, response, cb) => {
     return new Promise((resolve, reject) => {
         var queryData = "";
@@ -77,6 +76,91 @@ const processPostAsync = (request, response) => {
     })
 }
 
+const ruleAPI = (request, response) => {
+    try {
+        const rootPath = path.dirname(require.main.filename || process.mainModule.filename);
+        const staticPath = 'rules';
+
+        switch (request.method) {
+            case 'POST':
+                processPostAsync(request, response)
+                    .then(() => {
+                        return createDirectory(path.join(rootPath, staticPath, request.bodyData.clientId))
+                    })
+                    .then((clientIdPath) => {
+                        return writeFile(path.join(clientIdPath, `${request.bodyData.rule.ruleId}.json`),
+                            JSON.stringify(Object.assign({ id: uuidv4(), pathUrl: request.bodyData.rule.ruleId.replace(/\./g, '/'), }, request.bodyData.rule)));
+                    })
+                    .then((newRule) => {
+                        response.statusCode = 201;
+                        response.end(newRule)
+                    })
+                    .catch((error) => {
+                        const additionalErrorParams = {
+                            statusCode: 500,
+                            description: 'Server Error'
+                        }
+                        const responseError = Object.assign({}, additionalErrorParams, error);
+                        throw responseError;
+                    });
+                break;
+            case 'GET':
+                let parts = url.parse(request.url, true);
+                let query = parts.query;
+                
+                getAllFilesFromDirectory(path.join(rootPath, staticPath, query.clientId))
+                    .then((rulesFile) => {
+                        let rules = rulesFile.map((ruleFile) => {
+                            return readFile(ruleFile);
+                        });
+
+                        return Promise.all(rules);
+                    })
+                    .then((rules) => {
+                        response.statusCode = 200;
+                        response.send(JSON.stringify(rules));
+                    })
+                    .catch((error) => {
+                        const additionalErrorParams = {
+                            statusCode: 500,
+                            description: 'Server Error'
+                        }
+                        const responseError = Object.assign({}, additionalErrorParams, error);
+                        throw responseError;
+                    });
+                break;
+            case 'DELETE':
+                break;
+            case 'PUT':
+                processPostAsync(request, response)
+                    .then(() => {
+                        return writeFile(path.join(path.join(rootPath, staticPath, request.bodyData.clientId),
+                            `${request.bodyData.rule.id}.json`), JSON.stringify(request.bodyData.rule))
+                    })
+                    .then((updatedRule) => {
+                        response.statusCode = 204;
+                        response.end(updatedRule)
+                    })
+                    .catch((error) => {
+                        const additionalErrorParams = {
+                            statusCode: 500,
+                            description: 'Server Error'
+                        }
+                        const responseError = Object.assign({}, additionalErrorParams, error);
+                        throw responseError;
+                    });
+                break;
+            default:
+                break;
+        }
+
+    } catch (error) {
+        console.error('Rule Curd Error', error);
+        response.statusCode = 500;
+        return response.end();
+    }
+}
+
 const sendProxyRequest = (endpoint, request, response) => {
     console.log('='.repeat(request.url.length));
 
@@ -100,6 +184,78 @@ const sendProxyRequest = (endpoint, request, response) => {
     });
 }
 
+const proxyFlow = (request, response) => {
+    try {
+        const mirrorUrl = request.headers['x-proxy-mirror'];
+        const clientId = request.headers['x-proxy-clientid'];
+
+        if (!mirrorUrl || !clientId) {
+            throw ({
+                errorCode: 1,
+                statusCode: 400,
+                description: `Cannot proxy request without proxy mirror url: ${mirrorUrl ? mirrorUrl : 'N/A'} or client id ${clientId ? clientId : 'N/A'}`
+            });
+        }
+
+        const parsedMirrorUrl = url.parse(mirrorUrl, true);
+        // check if we have a client
+        // No?, create one.
+        // Yes?, check if we have there a rule that relate to current path.
+        // No?, continue to remote without modify not the response and the not the request.
+        // Yes?, use the rule transform and receive to modify the results.
+
+        const rootPath = path.dirname(require.main.filename || process.mainModule.filename);
+        const clientIdPath = path.join(rootPath, clientId);
+
+        createDirectory(clientIdPath)
+            .then(() => {
+                fs.createReadStream(path.join(rootPath, `${parsedMirrorUrl.pathname.replace(/\//g, '.')}.json`));
+            })
+            .catch((error) => {
+                const additionalErrorParams = {
+                    statusCode: 500,
+                    description: 'Server Error'
+                }
+
+                const responseError = Object.assign({}, additionalErrorParams, error);
+
+                throw responseError;
+            });
+
+
+        return sendProxyRequest(mirrorUrl, request, response);
+
+        // if (proxyMaskRules.has(maskId)) {
+
+        //     let proxyMaskRule = proxyMaskRules.get(maskId);
+
+        //     if (proxyMaskRule.pathRules.has(requestURL.pathname)) {
+
+        //         let proxyMaskPathRule = proxyMaskRule.pathRules.get(requestURL.pathname);
+
+        //         console.groupEnd();
+
+        //         response.end(JSON.stringify(proxyMaskPathRule.jsonResult));
+        //     } else {
+        //         return sendProxyRequest(proxyMaskRule.endpoint, request, response);
+        //     }
+
+        // } else {
+        //     throw ({
+        //         errorCode: 1,
+        //         statusCode: 400,
+        //         description: `No found configured mask id ${maskId} been found`
+        //     });
+        // }
+    } catch (error) {
+        console.error(JSON.stringify(error));
+        console.groupEnd();
+
+        response.statusCode = error.statusCode || 500;
+        return response.end(JSON.stringify(error));
+    }
+}
+
 exports.onProxyRequest = (request, response) => {
     console.group(`${request.method} - ${request.url}`);
 
@@ -116,155 +272,10 @@ exports.onProxyRequest = (request, response) => {
         return response.end('pong!');
     }
 
-    if (requestParsedUrl.pathname === '/rule') {
-        try {
-            const rootPath = path.dirname(require.main.filename || process.mainModule.filename);
-            const staticPath = 'rules';
-
-            switch (request.method) {
-                case 'POST':
-                    processPostAsync(request, response)
-                        .then(() => {
-                            return createDirectory(path.join(rootPath, staticPath, request.bodyData.clientId))
-                        })
-                        .then((clientIdPath) => {
-                            return writeFile(path.join(clientIdPath, `${request.bodyData.rule.ruleId}.json`), JSON.stringify(Object.assign({ id: uuidv4(), pathUrl: request.bodyData.rule.ruleId.replace(/\./g, '/'), }, request.bodyData.rule)));
-                        })
-                        .then((newRule) => {
-                            response.statusCode = 201;
-                            response.end(newRule)
-                        })
-                        .catch((error) => {
-                            const additionalErrorParams = {
-                                statusCode: 500,
-                                description: 'Server Error'
-                            }
-                            const responseError = Object.assign({}, additionalErrorParams, error);
-                            throw responseError;
-                        });
-                    break;
-                case 'GET':
-                    var parts = url.parse(request.url, true);
-                    var query = parts.query;
-                    getAllFilesFromDirectory(path.join(rootPath, staticPath, query.clientId))
-                        .then((rulesFile) => {
-                            let rules = rulesFile.map((ruleFile) => {
-                                return readFile(ruleFile);
-                            });
-
-                            return Promise.all(rules);
-                        })
-                        .then((rules) => {
-                            response.statusCode = 200;
-                            response.send(JSON.stringify(rules));
-                        })
-                        .catch((error) => {
-                            const additionalErrorParams = {
-                                statusCode: 500,
-                                description: 'Server Error'
-                            }
-                            const responseError = Object.assign({}, additionalErrorParams, error);
-                            throw responseError;
-                        });
-                    break;
-                case 'DELETE':
-                    break;
-                case 'PUT':
-                    processPostAsync(request, response)
-                        .then(() => {
-                            return writeFile(path.join(path.join(rootPath, staticPath, request.bodyData.clientId), `${request.bodyData.rule.id}.json`), JSON.stringify(request.bodyData.rule))
-                        })
-                        .then((updatedRule) => {
-                            response.statusCode = 204;
-                            response.end(updatedRule)
-                        })
-                        .catch((error) => {
-                            const additionalErrorParams = {
-                                statusCode: 500,
-                                description: 'Server Error'
-                            }
-                            const responseError = Object.assign({}, additionalErrorParams, error);
-                            throw responseError;
-                        });
-                    break;
-                default:
-                    break;
-            }
-
-        } catch (error) {
-            console.error('Rule Curd Error', error);
-            response.statusCode = 500;
-            return response.end();
-        }
-    } else {
-        try {
-            const mirrorUrl = request.headers['x-proxy-mirror'];
-            const clientId = request.headers['x-proxy-clientid'];
-
-            if (!mirrorUrl || !clientId) {
-                throw ({
-                    errorCode: 1,
-                    statusCode: 400,
-                    description: `Cannot proxy request without proxy mirror url: ${mirrorUrl ? mirrorUrl : 'N/A'} or client id ${clientId ? clientId : 'N/A'}`
-                });
-            }
-
-            const parsedMirrorUrl = url.parse(mirrorUrl, true);
-            // check if we have a client
-            // No?, create one.
-            // Yes?, check if we have there a rule that relate to current path.
-            // No?, continue to remote without modify not the response and the not the request.
-            // Yes?, use the rule transform and receive to modify the results.
-
-            const rootPath = path.dirname(require.main.filename || process.mainModule.filename);
-            const clientIdPath = path.join(rootPath, clientId);
-
-            createDirectory(clientIdPath)
-                .then(() => {
-                    fs.createReadStream(path.join(rootPath, `${parsedMirrorUrl.pathname.replace(/\//g, '.')}.json`));
-                })
-                .catch((error) => {
-                    const additionalErrorParams = {
-                        statusCode: 500,
-                        description: 'Server Error'
-                    }
-
-                    const responseError = Object.assign({}, additionalErrorParams, error);
-
-                    throw responseError;
-                });
-
-
-            return sendProxyRequest(mirrorUrl, request, response);
-
-            // if (proxyMaskRules.has(maskId)) {
-
-            //     let proxyMaskRule = proxyMaskRules.get(maskId);
-
-            //     if (proxyMaskRule.pathRules.has(requestURL.pathname)) {
-
-            //         let proxyMaskPathRule = proxyMaskRule.pathRules.get(requestURL.pathname);
-
-            //         console.groupEnd();
-
-            //         response.end(JSON.stringify(proxyMaskPathRule.jsonResult));
-            //     } else {
-            //         return sendProxyRequest(proxyMaskRule.endpoint, request, response);
-            //     }
-
-            // } else {
-            //     throw ({
-            //         errorCode: 1,
-            //         statusCode: 400,
-            //         description: `No found configured mask id ${maskId} been found`
-            //     });
-            // }
-        } catch (error) {
-            console.error(JSON.stringify(error));
-            console.groupEnd();
-
-            response.statusCode = error.statusCode || 500;
-            response.end(JSON.stringify(error));
-        }
+    switch (requestParsedUrl.pathname) {
+        case '/rule':
+            return ruleAPI(request, response);
+        default:
+            return proxyFlow(request, response);
     }
 }
