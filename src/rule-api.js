@@ -44,7 +44,7 @@ exports.ruleAPI = (request, response) => {
                         return writeFile(path.join(rootPath, staticPath, `${newRule.id}.json`), JSON.stringify(newRule));
                     })
                     .then((newRule) => {
-                        setInMemoreyRule(newRule.rulePathId, newRule);
+                        setInMemoreyRule(newRule);
 
                         response.statusCode = 201;
                         response.end(newRule)
@@ -116,7 +116,7 @@ exports.ruleAPI = (request, response) => {
                         return writeFile(path.join(rulesDirectory, `${ruleData.rule.id}.json`), JSON.stringify(updatedRule));
                     })
                     .then((updatedRule) => {
-                        setInMemoreyRule(updatedRule.rulePathId, updatedRule);
+                        setInMemoreyRule(updatedRule);
 
                         response.statusCode = 202;
                         response.end(updatedRule);

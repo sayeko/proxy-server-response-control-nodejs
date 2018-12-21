@@ -47,7 +47,7 @@ const run = (proxyServer) => {
       .then((ruleBuffers) => {
          const rules = ruleBuffers.map((ruleBuffer) => {
             try {
-               return JSON.parse(decoder.write(ruleBuffer));
+               return decoder.write(ruleBuffer);
             } catch (error) {
                console.error('Could not decode file', error);
             }
