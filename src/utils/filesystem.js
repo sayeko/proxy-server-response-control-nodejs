@@ -32,7 +32,7 @@ exports.getAllFilesFromDirectory = (path) => {
                 return reject(err);
             }
 
-            resolve(files);
+            resolve({ parent: path, children: files });
         })
     });
 }
@@ -45,6 +45,18 @@ exports.readFile = (path) => {
             }
 
             resolve(data);
+        });
+    });
+}
+
+exports.deleteFile = (path) => {
+    return new Promise((resolve, reject) => {
+        fs.unlink(path, (err) => {
+            if (err) {
+                return reject(err);
+            }
+
+            resolve();
         });
     });
 }

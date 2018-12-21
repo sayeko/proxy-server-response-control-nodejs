@@ -1,7 +1,7 @@
 const sendRequest = require('request');
 const url = require('url');
-const uuidv4 = require('uuid/v4');
 const path = require('path');
+const { ruleAPI } = require('./rule-api');
 const { handleCrossOrigin } = require('./utils/domain');
 const { createDirectory, writeFile, getAllFilesFromDirectory, readFile } = require('./utils/filesystem');
 
@@ -38,129 +38,6 @@ const progress = () => {
     });
 }
 
-const processPost = (request, response, cb) => {
-    return new Promise((resolve, reject) => {
-        var queryData = "";
-
-        if ('function' !== typeof cb) {
-            return;
-        }
-
-        request.on('data', function (data) {
-            queryData += data;
-            if (queryData.length > 1e6) {
-                queryData = "";
-                response.writeHead(413, { 'Content-Type': 'text/plain' }).end();
-                request.connection.destroy();
-                cb({ error: true });
-            }
-        });
-
-        request.on('end', function () {
-            request.bodyData = JSON.parse(queryData);
-
-            cb();
-        });
-    });
-}
-
-const processPostAsync = (request, response) => {
-    return new Promise((resolve, reject) => {
-        processPost(request, response, function (error) {
-            if (error) {
-                return reject();
-            }
-
-            resolve();
-        });
-    })
-}
-
-const ruleAPI = (request, response) => {
-    try {
-        const rootPath = path.dirname(require.main.filename || process.mainModule.filename);
-        const staticPath = 'rules';
-
-        switch (request.method) {
-            case 'POST':
-                processPostAsync(request, response)
-                    .then(() => {
-                        return createDirectory(path.join(rootPath, staticPath, request.bodyData.clientId))
-                    })
-                    .then((clientIdPath) => {
-                        return writeFile(path.join(clientIdPath, `${request.bodyData.rule.ruleId}.json`),
-                            JSON.stringify(Object.assign({ id: uuidv4(), pathUrl: request.bodyData.rule.ruleId.replace(/\./g, '/'), }, request.bodyData.rule)));
-                    })
-                    .then((newRule) => {
-                        response.statusCode = 201;
-                        response.end(newRule)
-                    })
-                    .catch((error) => {
-                        const additionalErrorParams = {
-                            statusCode: 500,
-                            description: 'Server Error'
-                        }
-                        const responseError = Object.assign({}, additionalErrorParams, error);
-                        throw responseError;
-                    });
-                break;
-            case 'GET':
-                let parts = url.parse(request.url, true);
-                let query = parts.query;
-                
-                getAllFilesFromDirectory(path.join(rootPath, staticPath, query.clientId))
-                    .then((rulesFile) => {
-                        let rules = rulesFile.map((ruleFile) => {
-                            return readFile(ruleFile);
-                        });
-
-                        return Promise.all(rules);
-                    })
-                    .then((rules) => {
-                        response.statusCode = 200;
-                        response.send(JSON.stringify(rules));
-                    })
-                    .catch((error) => {
-                        const additionalErrorParams = {
-                            statusCode: 500,
-                            description: 'Server Error'
-                        }
-                        const responseError = Object.assign({}, additionalErrorParams, error);
-                        throw responseError;
-                    });
-                break;
-            case 'DELETE':
-                break;
-            case 'PUT':
-                processPostAsync(request, response)
-                    .then(() => {
-                        return writeFile(path.join(path.join(rootPath, staticPath, request.bodyData.clientId),
-                            `${request.bodyData.rule.id}.json`), JSON.stringify(request.bodyData.rule))
-                    })
-                    .then((updatedRule) => {
-                        response.statusCode = 204;
-                        response.end(updatedRule)
-                    })
-                    .catch((error) => {
-                        const additionalErrorParams = {
-                            statusCode: 500,
-                            description: 'Server Error'
-                        }
-                        const responseError = Object.assign({}, additionalErrorParams, error);
-                        throw responseError;
-                    });
-                break;
-            default:
-                break;
-        }
-
-    } catch (error) {
-        console.error('Rule Curd Error', error);
-        response.statusCode = 500;
-        return response.end();
-    }
-}
-
 const sendProxyRequest = (endpoint, request, response) => {
     console.log('='.repeat(request.url.length));
 
@@ -180,7 +57,6 @@ const sendProxyRequest = (endpoint, request, response) => {
     proxyRequest.on('finish', () => {
         console.info('Finish Round Trip to %s', request.url);
         console.log('='.repeat(request.url.length));
-        console.groupEnd();
     });
 }
 
@@ -249,7 +125,6 @@ const proxyFlow = (request, response) => {
         // }
     } catch (error) {
         console.error(JSON.stringify(error));
-        console.groupEnd();
 
         response.statusCode = error.statusCode || 500;
         return response.end(JSON.stringify(error));
@@ -257,22 +132,24 @@ const proxyFlow = (request, response) => {
 }
 
 exports.onProxyRequest = (request, response) => {
-    console.group(`${request.method} - ${request.url}`);
+    console.log(`${request.method} - ${request.url}`);
 
-    let requestParsedUrl = url.parse(request.url, true);
+    // Parse the request url and save it on the current request instance.
+    request.parsedURL = url.parse(request.url, true);
 
     // Handle Cross Origin and Preflight requests from to allowed to send us requests from different domains.
     if (request.method === 'OPTIONS') {
-        console.groupEnd();
         return handleCrossOrigin(response)
     }
 
+    // Handle ping request to check that we connected to proxy and server is on air.
     if (request.headers['x-proxy-ping']) {
         response.statusCode = 200;
         return response.end('pong!');
     }
 
-    switch (requestParsedUrl.pathname) {
+    // Handle rules/proxy requests.
+    switch (request.parsedURL.pathname) {
         case '/rule':
             return ruleAPI(request, response);
         default:
