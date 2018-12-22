@@ -16,7 +16,11 @@ const processPostRequestBody = (request, response, cb) => {
     });
 
     request.on('end', function () {
-        request.body = JSON.parse(queryData);
+        try {
+            request.body = JSON.parse(queryData);
+        } catch (error) {
+            request.body = {};
+        }
 
         cb();
     });

@@ -1,32 +1,43 @@
 const sendRequest = require('request');
 const url = require('url');
+const vm = require('vm')
+const { parseRequestBody } = require('./utils/request-helper');
 const { ruleAPI } = require('./rule-api');
 const { handleCrossOrigin } = require('./utils/domain');
 const { getFromMemoreyRule } = require('./rule-manager');
 
 const { Transform } = require('stream');
 
-const receiveTransformRequest = (transformResult) => {
+const receiveTransformRequest = (transformationHandler) => {
     let data = ''
 
     return new Transform({
         transform(chunk, encoding, callback) {
             data += chunk;
-            callback(null, chunk);
+            callback(null, null);
         },
 
         flush(done) {
             let err = null;
-            if (data) {
-                try {
-                    var obj = JSON.parse(data);
-                    console.log(obj)
-                    console.log(this);
-                    this.push(JSON.stringify(obj));
-                    this.push(null);
-                } catch (ex) {
-                    err = ex;
+
+            try {
+                const responseSandbox = { responseResult: data };
+
+                vm.createContext(responseSandbox);
+
+                const executionCode = `(function() { ${transformationHandler} if('function' !== typeof transform) { return responseResult } return transform(responseResult); })()`;
+
+                // Define 50 milliseconds timeout code execution.
+                let transformedProxyResponse = vm.runInNewContext(executionCode, responseSandbox, { timeout: 50 });
+
+                if ('string' !== typeof transformedProxyResponse) {
+                    transformedProxyResponse = JSON.stringify(transformedProxyResponse);
                 }
+
+                this.push(transformedProxyResponse);
+                this.push(null);
+            } catch (ex) {
+                err = ex;
             }
 
             done(err);
@@ -61,33 +72,37 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
     const fullEndpoint = `${endpoint}${request.url}`;
 
     try {
-        (function() {
-            // Evaluating dynamic transformation server request. 
-            eval(rule.sendTransformRequest);
+        const requestSandbox = { request: request };
 
-            console.log(transform(request));
-        })()
+        // Contextify the sandbox.
+        vm.createContext(requestSandbox);
 
-    } catch(error) {
-        console.error('Send transform error', error);
+        const executionCode = `(function() { ${rule.sendTransformRequest} if('function' !== typeof transform) { return request } return transform(request); })()`;
+
+        // Define 50 milliseconds timeout code execution.
+        const transformedProxyRequest = vm.runInNewContext(executionCode, requestSandbox, { timeout: 50 });
+
+        const transformedProxyRequestStream =
+            transformedProxyRequest
+                .pipe(sendRequest(fullEndpoint))
+                .pipe(receiveTransformRequest(rule.receiveTransformRespons))
+                .on('error', (error) => {
+                    console.error('Transforming response result ERROR', error);
+                })
+                .pipe(response)
+
+        transformedProxyRequestStream.on('error', (error) => {
+            console.error(error);
+        });
+
+        transformedProxyRequestStream.on('finish', () => {
+            console.info('Finish Ruled Round Trip to %s', request.url);
+            console.log('='.repeat(request.url.length));
+        });
+    } catch (error) {
+        console.error('Send proxy rule request', error);
         throw error;
     }
-
-    const proxyRequest =
-        request
-            .pipe(sendRequest(fullEndpoint))
-            .pipe(receiveTransformRequest(rule.receiveTransformRespons))
-            .pipe(response)
-
-    proxyRequest.on('error', (error) => {
-        console.error(error);
-        response.end(JSON.stringify(error));
-    });
-
-    proxyRequest.on('finish', () => {
-        console.info('Finish Ruled Round Trip to %s', request.url);
-        console.log('='.repeat(request.url.length));
-    });
 }
 
 const proxyFlow = (request, response) => {
@@ -116,7 +131,7 @@ const proxyFlow = (request, response) => {
         console.error(JSON.stringify(error));
 
         response.statusCode = error.statusCode || 500;
-        return response.end(JSON.stringify(error));
+        return response.end(JSON.stringify({ message: error.message }));
     }
 }
 
@@ -137,8 +152,18 @@ exports.onProxyRequest = (request, response) => {
         return response.end('pong!');
     }
 
-    // Handle rules/proxy requests.
-    switch (request.parsedURL.pathname) {
+    if (request.headers['content-type'] && request.headers['content-type'].indexOf('application/json') !== -1) {
+        return parseRequestBody(request, response)
+            .then(() => {
+                router(request.parsedURL.pathname, request, response);
+            })
+    }
+
+    router(request.parsedURL.pathname, request, response);
+}
+
+const router = (path, request, response) => {
+    switch (path) {
         case '/rule':
             return ruleAPI(request, response);
         default:

@@ -31,18 +31,15 @@ exports.ruleAPI = (request, response) => {
 
         switch (request.method) {
             case 'POST':
-                parseRequestBody(request, response)
-                    .then((ruleData) => {
-                        var newRule = createNewRule(ruleData.rule);
-                        if (!newRule) {
-                            throw {
-                                statusCode: 400,
-                                description: 'Could not create new rule invalid request parameters'
-                            }
-                        }
+                let newRule = createNewRule(request.body.rule);
+                if (!newRule) {
+                    throw {
+                        statusCode: 400,
+                        description: 'Could not create new rule invalid request parameters'
+                    }
+                }
 
-                        return writeFile(path.join(rootPath, staticPath, `${newRule.id}.json`), JSON.stringify(newRule));
-                    })
+                writeFile(path.join(rootPath, staticPath, `${newRule.id}.json`), JSON.stringify(newRule))
                     .then((newRule) => {
                         setInMemoreyRule(newRule);
 
@@ -53,6 +50,7 @@ exports.ruleAPI = (request, response) => {
                         response.statusCode = error.statusCode || 500
                         response.end(JSON.stringify(error));
                     });
+
                 break;
             case 'GET':
                 let query = request.parsedURL.query;
@@ -72,7 +70,7 @@ exports.ruleAPI = (request, response) => {
                             const rules = ruleBuffers.map((ruleBuffer) => {
                                 try {
                                     return JSON.parse(decoder.write(ruleBuffer));
-                                } catch(error) {
+                                } catch (error) {
                                     console.error('Could not decode file', error);
                                 }
                             });
@@ -102,19 +100,16 @@ exports.ruleAPI = (request, response) => {
                     });
                 break;
             case 'PUT':
-                parseRequestBody(request, response)
-                    .then((ruleData) => {
-                        if (!ruleData.rule) {
-                            throw {
-                                statusCode: 400,
-                                description: 'Could not update rule invalid parameters'
-                            }
-                        }
+                if (!request.body.rule) {
+                    throw {
+                        statusCode: 400,
+                        description: 'Could not update rule invalid parameters'
+                    }
+                }
 
-                        const updatedRule = updateRule(ruleData.rule);
+                const updatedRule = updateRule(request.body.rule);
 
-                        return writeFile(path.join(rulesDirectory, `${ruleData.rule.id}.json`), JSON.stringify(updatedRule));
-                    })
+                writeFile(path.join(rulesDirectory, `${updatedRule.id}.json`), JSON.stringify(updatedRule))
                     .then((updatedRule) => {
                         setInMemoreyRule(updatedRule);
 
