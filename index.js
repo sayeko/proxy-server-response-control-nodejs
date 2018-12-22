@@ -1,8 +1,9 @@
 const http = require('http');
-const { onProxyRequest } = require('./src/proxy');
 const path = require('path');
+const fs = require('fs');
 const { StringDecoder } = require('string_decoder');
 const decoder = new StringDecoder('utf8');
+const { onProxyRequest } = require('./src/proxy');
 const { getAllFilesFromDirectory, readFile } = require('./src/utils/filesystem');
 const { setInMemoreyRule } = require('./src/rule-manager');
 
