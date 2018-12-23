@@ -4,7 +4,7 @@ const fs = require('fs');
 const { StringDecoder } = require('string_decoder');
 const decoder = new StringDecoder('utf8');
 const { onProxyRequest } = require('./src/proxy');
-const { getAllFilesFromDirectory, readFile } = require('./src/utils/filesystem');
+const { getAllFilesFromDirectory, readFile, createDirectory } = require('./src/utils/filesystem');
 const { setInMemoreyRule } = require('./src/rule-manager');
 
 const PROXY_PORT = 3000;
@@ -37,7 +37,14 @@ const listen = (server) => {
 }
 
 const run = (proxyServer) => {
-   getAllFilesFromDirectory(path.join(__dirname, '/rules'))
+   // https://nodejs.org/api/http.html#http_server_timeout
+   // The deafult is 2 min so I don't change it yet.
+   // proxyServer.timeout = 120000;
+
+   const rulesPath = path.join(__dirname, 'rules');
+
+   createDirectory(rulesPath)
+      .then(getAllFilesFromDirectory)
       .then((rulesFile) => {
          let rules = rulesFile.children.map((ruleFile) => {
             return readFile(path.join(rulesFile.parent, ruleFile));
@@ -63,7 +70,7 @@ const run = (proxyServer) => {
          return listen(proxyServer);
       })
       .catch((error) => {
-         console.error('Could not load all rules from files', error);
+         console.error('Error could not load the system.', error);
       });
 }
 

@@ -55,15 +55,15 @@ const sendProxyRequest = (endpoint, request, response) => {
             .pipe(sendRequest(fullEndpoint))
             .pipe(response)
 
-    proxyRequest.on('error', (error) => {
-        console.error(error);
-        response.end(JSON.stringify(error));
-    });
-
-    proxyRequest.on('finish', () => {
-        console.info('Finish Round Trip to %s', request.url);
-        console.log('='.repeat(request.url.length));
-    });
+    proxyRequest
+        .on('error', (error) => {
+            console.error(error);
+            response.end(JSON.stringify(error));
+        })
+        .on('finish', () => {
+            console.info('Finish Round Trip to %s', request.url);
+            console.log('='.repeat(request.url.length));
+        });
 }
 
 const sendProxyRuleRequest = (endpoint, rule, request, response) => {
@@ -81,24 +81,33 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
 
         // Define 50 milliseconds timeout code execution.
         const transformedProxyRequest = vm.runInNewContext(executionCode, requestSandbox, { timeout: 50 });
+        const transformResponseStream = receiveTransformRequest(rule.receiveTransformRespons);
+
+        transformResponseStream
+            .on('unpipe', function(source) {
+                console.warn('transformedProxyRequestStream unpiped from transformResponseStream');
+            })
+            .on('error', function (error) {
+                console.error('ERROR Transforming response result', error);
+                this.end();
+            });
 
         const transformedProxyRequestStream =
             transformedProxyRequest
                 .pipe(sendRequest(fullEndpoint))
-                .pipe(receiveTransformRequest(rule.receiveTransformRespons))
-                .on('error', (error) => {
-                    console.error('Transforming response result ERROR', error);
-                })
-                .pipe(response)
+                .pipe(transformResponseStream)
+                .pipe(response);
 
-        transformedProxyRequestStream.on('error', (error) => {
-            console.error(error);
-        });
+        transformedProxyRequestStream
+            .on('error', function (error) {
+                // this.end();
+            });
 
         transformedProxyRequestStream.on('finish', () => {
             console.info('Finish Ruled Round Trip to %s', request.url);
             console.log('='.repeat(request.url.length));
         });
+
     } catch (error) {
         throw createErrorResponse({ message: error.message, status: 400 });
     }
