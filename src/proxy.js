@@ -1,7 +1,7 @@
 const sendRequest = require('request');
 const url = require('url');
 const vm = require('vm')
-const { parseRequestBody } = require('./utils/request-helper');
+const { parseRequestBody, truncatePathUrlToPathId, createErrorResponse } = require('./utils/request-helper');
 const { ruleAPI } = require('./rule-api');
 const { handleCrossOrigin } = require('./utils/domain');
 const { getFromMemoreyRule } = require('./rule-manager');
@@ -100,8 +100,7 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
             console.log('='.repeat(request.url.length));
         });
     } catch (error) {
-        console.error('Send proxy rule request', error);
-        throw error;
+        throw createErrorResponse({ message: error.message, status: 400 });
     }
 }
 
@@ -110,16 +109,12 @@ const proxyFlow = (request, response) => {
         const mirrorUrl = request.headers['x-proxy-mirror'];
 
         if (!mirrorUrl) {
-            throw ({
-                errorCode: 1,
-                statusCode: 400,
-                description: `Cannot proxy request without proxy mirror url: ${mirrorUrl ? mirrorUrl : 'N/A'}`
-            });
+            throw createErrorResponse({ message: `Cannot proxy request without proxy mirror url: ${mirrorUrl ? mirrorUrl : 'N/A'}`, status: 400 });
         }
 
         const parsedMirrorUrl = url.parse(mirrorUrl, true);
 
-        const rule = getFromMemoreyRule(parsedMirrorUrl.pathname.replace(/\//g, '.'));
+        const rule = getFromMemoreyRule(truncatePathUrlToPathId(parsedMirrorUrl.pathname));
 
         if (rule && rule.enable) {
             return sendProxyRuleRequest(mirrorUrl, rule, request, response);
@@ -128,10 +123,8 @@ const proxyFlow = (request, response) => {
         return sendProxyRequest(mirrorUrl, request, response);
 
     } catch (error) {
-        console.error(JSON.stringify(error));
-
-        response.statusCode = error.statusCode || 500;
-        return response.end(JSON.stringify({ message: error.message }));
+        response.statusCode = error.status;
+        response.end(JSON.stringify(error));
     }
 }
 

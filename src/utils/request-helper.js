@@ -30,12 +30,30 @@ exports.parseRequestBody = (request, response) => {
     return new Promise((resolve, reject) => {
         processPostRequestBody(request, response, function (error) {
             if (error) {
-                return reject({
-                    description: 'Could not parse request body'
-                });
+                return reject(createErrorResponse({message: 'Invalid POST Request', status: 400}));
             }
 
             resolve(request.body);
         });
     })
+}
+
+exports.createErrorResponse = (error) => {
+    return Object.assign({}, {
+        message: 'Server Error',
+        status: 500
+    }, error);
+}
+
+
+exports.truncatePathUrlToPathId = (url) => {
+    if ('string' !== typeof url) {
+        return '';
+    }
+
+    if (url.charAt(0) === '/') {
+        url = url.substr(1);
+    }
+
+    return url.replace(/\//g, '.');
 }

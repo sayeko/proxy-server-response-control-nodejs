@@ -2,7 +2,7 @@ const path = require('path');
 const uuidv4 = require('uuid/v4');
 const { StringDecoder } = require('string_decoder');
 const decoder = new StringDecoder('utf8');
-const { parseRequestBody } = require('./utils/request-helper');
+const { createErrorResponse } = require('./utils/request-helper');
 const { writeFile, deleteFile, getAllFilesFromDirectory, readFile } = require('./utils/filesystem');
 const { setInMemoreyRule, deleteFromMemoreyRule } = require('./rule-manager');
 
@@ -33,10 +33,7 @@ exports.ruleAPI = (request, response) => {
             case 'POST':
                 let newRule = createNewRule(request.body.rule);
                 if (!newRule) {
-                    throw {
-                        statusCode: 400,
-                        description: 'Could not create new rule invalid request parameters'
-                    }
+                    throw createErrorResponse({ message: 'Missing rule details', status: 400 });
                 }
 
                 writeFile(path.join(rootPath, staticPath, `${newRule.id}.json`), JSON.stringify(newRule))
@@ -47,8 +44,10 @@ exports.ruleAPI = (request, response) => {
                         response.end(newRule)
                     })
                     .catch((error) => {
-                        response.statusCode = error.statusCode || 500
-                        response.end(JSON.stringify(error));
+                        let responseError = createErrorResponse({ message: error.message, status: 400 });
+
+                        response.statusCode = responseError.status;
+                        response.end(JSON.stringify(responseError));
                     });
 
                 break;
@@ -79,8 +78,10 @@ exports.ruleAPI = (request, response) => {
                             response.end(JSON.stringify(rules));
                         })
                         .catch((error) => {
-                            response.statusCode = error.statusCode || 500
-                            response.end(JSON.stringify(error));
+                            let responseError = createErrorResponse({ message: error.message, status: 400 });
+
+                            response.statusCode = responseError.status;
+                            response.end(JSON.stringify(responseError));
                         });
                 }
                 break;
@@ -91,20 +92,19 @@ exports.ruleAPI = (request, response) => {
                     .then(function () {
                         deleteFromMemoreyRule(queryParams.id);
 
-                        response.statusCode = 202;
-                        response.end(JSON.stringify({ id: queryParams.id, type: 'delete', timestamp: Date.now() }));
+                        response.statusCode = 204;
+                        response.end();
                     })
                     .catch(function (error) {
-                        response.statusCode = error.statusCode || 500
-                        response.end(JSON.stringify(error));
+                        let responseError = createErrorResponse({ message: error.message, status: 400 });
+
+                        response.statusCode = responseError.status;
+                        response.end(JSON.stringify(responseError));
                     });
                 break;
             case 'PUT':
                 if (!request.body.rule) {
-                    throw {
-                        statusCode: 400,
-                        description: 'Could not update rule invalid parameters'
-                    }
+                    throw createErrorResponse({ message: 'Invalid rule details', status: 400 });
                 }
 
                 const updatedRule = updateRule(request.body.rule);
@@ -117,21 +117,18 @@ exports.ruleAPI = (request, response) => {
                         response.end(updatedRule);
                     })
                     .catch((error) => {
-                        const additionalErrorParams = {
-                            statusCode: 500,
-                            description: 'Server Error'
-                        }
-                        const responseError = Object.assign({}, additionalErrorParams, error);
-                        throw responseError;
+                        let responseError = createErrorResponse({ message: error.message, status: 400 });
+
+                        response.statusCode = responseError.status;
+                        response.end(JSON.stringify(responseError));
                     });
                 break;
             default:
-                break;
+                throw createErrorResponse({ message: 'Unsupported request method', status: 405 });
         }
 
     } catch (error) {
-        console.error('Rule CURD Error', error);
-        response.statusCode = 500;
-        return response.end();
+        response.statusCode = error.status;
+        response.end(JSON.stringify(error));
     }
 }
