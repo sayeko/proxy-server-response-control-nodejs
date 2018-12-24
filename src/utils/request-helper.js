@@ -1,3 +1,5 @@
+const chalk = require('chalk');
+
 const processPostRequestBody = (request, response, cb) => {
     var queryData = "";
 
@@ -56,4 +58,8 @@ exports.truncatePathUrlToPathId = (url) => {
     }
 
     return url.replace(/\//g, '.');
+}
+
+exports.requestLog = (request, message) => {
+    console.log(chalk.green(`[COPY_CAT_PROXY] ${request.id} - ${request.method} - ${request.url} - ${Date.now()} \n ${message}`));
 }

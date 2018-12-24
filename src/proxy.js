@@ -1,7 +1,8 @@
 const sendRequest = require('request');
 const url = require('url');
-const vm = require('vm')
-const { parseRequestBody, truncatePathUrlToPathId, createErrorResponse } = require('./utils/request-helper');
+const vm = require('vm');
+const uuidv1 = require('uuid/v1');
+const { parseRequestBody, truncatePathUrlToPathId, createErrorResponse, requestLog } = require('./utils/request-helper');
 const { ruleAPI } = require('./rule-api');
 const { handleCrossOrigin } = require('./utils/domain');
 const { getFromMemoreyRule } = require('./rule-manager');
@@ -37,6 +38,8 @@ const receiveTransformRequest = (transformationHandler) => {
                 this.push(transformedProxyResponse);
                 this.push(null);
             } catch (ex) {
+                // We face an error return original remote response result.
+                this.push(data);
                 err = ex;
             }
 
@@ -46,9 +49,9 @@ const receiveTransformRequest = (transformationHandler) => {
 }
 
 const sendProxyRequest = (endpoint, request, response) => {
-    console.log('='.repeat(request.url.length));
-
     const fullEndpoint = `${endpoint}${request.url}`;
+
+    requestLog(request, `Sending request to ${fullEndpoint}`);
 
     const proxyRequest =
         request
@@ -57,18 +60,18 @@ const sendProxyRequest = (endpoint, request, response) => {
 
     proxyRequest
         .on('error', (error) => {
-            console.error(error);
+            console.error(chalk.error(`Error return from remote server ${error}`));
             response.end(JSON.stringify(error));
+
+            // Close the stream.
+            this.end();
         })
         .on('finish', () => {
-            console.info('Finish Round Trip to %s', request.url);
-            console.log('='.repeat(request.url.length));
+            requestLog(request, `Sending back response to client from  ${fullEndpoint}`);
         });
 }
 
 const sendProxyRuleRequest = (endpoint, rule, request, response) => {
-    console.log('='.repeat(request.url.length));
-
     const fullEndpoint = `${endpoint}${request.url}`;
 
     try {
@@ -83,14 +86,12 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
         const transformedProxyRequest = vm.runInNewContext(executionCode, requestSandbox, { timeout: 50 });
         const transformResponseStream = receiveTransformRequest(rule.receiveTransformRespons);
 
-        transformResponseStream
-            .on('unpipe', function(source) {
-                console.warn('transformedProxyRequestStream unpiped from transformResponseStream');
-            })
-            .on('error', function (error) {
-                console.error('ERROR Transforming response result', error);
-                this.end();
-            });
+        transformResponseStream.on('error', function(error) {
+            console.error(chalk.red(`ERROR Could not transform response ${error}`));
+
+            // Unpipe from the stream.
+            transformedProxyRequestStream.end();
+        });
 
         const transformedProxyRequestStream =
             transformedProxyRequest
@@ -100,13 +101,14 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
 
         transformedProxyRequestStream
             .on('error', function (error) {
-                // this.end();
-            });
+                console.error(chalk.red(`Error Could not transform response ${error}`));
 
-        transformedProxyRequestStream.on('finish', () => {
-            console.info('Finish Ruled Round Trip to %s', request.url);
-            console.log('='.repeat(request.url.length));
-        });
+                // Close the stream.
+                this.end();
+            })
+            .on('finish', () => {
+                requestLog(request, `Sending back response to client from ${fullEndpoint} After Transformation`);
+            });
 
     } catch (error) {
         throw createErrorResponse({ message: error.message, status: 400 });
@@ -123,11 +125,21 @@ const proxyFlow = (request, response) => {
 
         const parsedMirrorUrl = url.parse(mirrorUrl, true);
 
-        const rule = getFromMemoreyRule(truncatePathUrlToPathId(parsedMirrorUrl.pathname));
+        const rulePathId = truncatePathUrlToPathId(parsedMirrorUrl.pathname);
+        const rule = getFromMemoreyRule(rulePathId);
+
+        // Only doing this for debug and information while debug.
+        if (!rule) {
+            requestLog(request, `Not found rule in memory that match ${rulePathId}`);
+        }
 
         if (rule && rule.enable) {
+            requestLog(request, `Found rule in memory ${rule.rulePathId}`);
+
             return sendProxyRuleRequest(mirrorUrl, rule, request, response);
         }
+
+        requestLog(request, `Proxing the request to the remote server without transform it...`);
 
         return sendProxyRequest(mirrorUrl, request, response);
 
@@ -138,10 +150,11 @@ const proxyFlow = (request, response) => {
 }
 
 exports.onProxyRequest = (request, response) => {
-    console.log(`${request.method} - ${request.url}`);
-
     // Parse the request url and save it on the current request instance.
     request.parsedURL = url.parse(request.url, true);
+    request.id = uuidv1();
+
+    requestLog(request, 'New Request Arrived...');
 
     // Handle Cross Origin and Preflight requests from to allowed to send us requests from different domains.
     if (request.method === 'OPTIONS') {

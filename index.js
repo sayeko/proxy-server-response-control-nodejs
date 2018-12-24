@@ -1,6 +1,6 @@
 const http = require('http');
 const path = require('path');
-const fs = require('fs');
+const chalk = require('chalk');
 const { StringDecoder } = require('string_decoder');
 const decoder = new StringDecoder('utf8');
 const { onProxyRequest } = require('./src/proxy');
@@ -11,25 +11,24 @@ const PROXY_PORT = 3000;
 const REMOTE_PORT = 3001;
 
 process.on('uncaughtException', (err) => {
-   fs.writeSync(1, `Caught exception: ${err}\n`);
+   console.error(chalk.red(`Caught exception: ${err}\n`));
 });
 
 process.on('exit', (err) => {
-   console.log('exit');
+   console.log(chalk.red(`Process exit ${err}`));
 });
 
 const listen = (server) => {
    return new Promise((resolve, reject) => {
       // Start server.
       server.listen(PROXY_PORT, (err) => {
-         process.stdout.write('\033c');
 
          if (err) {
-            console.log('something bad happened', err);
+            console.error('something bad happened', err);
             return reject();
          }
 
-         console.log(`[PROXY] server is listening on ${PROXY_PORT}`);
+         console.log(chalk.green(`[COPY_CAT_PROXY] server is listening on ${PROXY_PORT}`));
 
          resolve(server);
       });
@@ -40,6 +39,11 @@ const run = (proxyServer) => {
    // https://nodejs.org/api/http.html#http_server_timeout
    // The deafult is 2 min so I don't change it yet.
    // proxyServer.timeout = 120000;
+   
+   // Clear all console from previous noise.
+   process.stdout.write('\033c');
+
+   console.log(chalk.yellow('Booting up proxy server...'));
 
    const rulesPath = path.join(__dirname, 'rules');
 
@@ -47,8 +51,12 @@ const run = (proxyServer) => {
       .then(getAllFilesFromDirectory)
       .then((rulesFile) => {
          let rules = rulesFile.children.map((ruleFile) => {
+            console.log(chalk.yellow(`Read rule file ${ruleFile}`));
+
             return readFile(path.join(rulesFile.parent, ruleFile));
          });
+
+         console.log(chalk.yellow('Finish to read all rules...'));
 
          return Promise.all(rules);
       })
@@ -57,7 +65,7 @@ const run = (proxyServer) => {
             try {
                return decoder.write(ruleBuffer);
             } catch (error) {
-               console.error('Could not decode file', error);
+               console.error(chalk.red('Could not decode json rule file'), error);
             }
          });
 
@@ -65,22 +73,23 @@ const run = (proxyServer) => {
             setInMemoreyRule(rule);
          });
 
-         console.log('Load all rules to Memorey...');
+         console.log(chalk.yellow('Allocate all rules into memory for flash query...'));
 
          return listen(proxyServer);
       })
       .catch((error) => {
-         console.error('Error could not load the system.', error);
+         console.error(chalk.red('Error could not load the system.'), error);
       });
 }
 
 const onRequestRemote = (request, response) => {
-   console.log('Remote Server...', request.url);
+   console.log(chalk.blue(`[TEST_ENV_SERVER] ${request.url}`));
 
    const randomData = Math.floor((Math.random() * 10) + 1);
+   
    const data = { data: randomData };
 
-   console.log('Remote Server Data...', JSON.stringify(data));
+   console.log(chalk.blue(`[TEST_ENV_SERVER] Response Body data ${JSON.stringify(data)}`));
 
    response.end(JSON.stringify(data));
 }
@@ -90,10 +99,10 @@ const remoteServer = http.createServer(onRequestRemote);
 
 remoteServer.listen(REMOTE_PORT, (err) => {
    if (err) {
-      return console.log('something bad happened', err)
+      return console.error('something bad happened', err)
    }
 
-   console.log(`[REMOTE] server is listening on ${REMOTE_PORT}`)
+   console.log(chalk.blue(`[TEST_ENV_SERVER] server is listening on ${REMOTE_PORT}`));
 });
 
 
