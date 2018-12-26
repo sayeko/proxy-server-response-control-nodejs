@@ -11,11 +11,11 @@ const PROXY_PORT = 3000;
 const REMOTE_PORT = 3001;
 
 process.on('uncaughtException', (err) => {
-   console.error(chalk.red(`Caught exception: ${err}\n`));
+   console.error(`Caught exception: ${err}\n`);
 });
 
 process.on('exit', (err) => {
-   console.log(chalk.red(`Process exit ${err}`));
+   console.log(`Process exit ${err}`);
 });
 
 const listen = (server) => {
@@ -85,13 +85,10 @@ const run = (proxyServer) => {
 const onRequestRemote = (request, response) => {
    console.log(chalk.blue(`[TEST_ENV_SERVER] ${request.url}`));
 
-   const randomData = Math.floor((Math.random() * 10) + 1);
-   
-   const data = { data: randomData };
+   console.log(chalk.blue(`[TEST_ENV_SERVER] Response Body.....`));
 
-   console.log(chalk.blue(`[TEST_ENV_SERVER] Response Body data ${JSON.stringify(data)}`));
-
-   response.end(JSON.stringify(data));
+   response.writeHead(200, {'Content-Type': 'application/json'});
+   return response.end(JSON.stringify({ person: 'Hello' }));
 }
 
 // Mock remote server.
