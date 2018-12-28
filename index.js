@@ -3,7 +3,7 @@ const path = require('path');
 const chalk = require('chalk');
 const { StringDecoder } = require('string_decoder');
 const decoder = new StringDecoder('utf8');
-const { onProxyRequest } = require('./src/proxy');
+const { onProxyRequest, onProxyRequest2 } = require('./src/proxy');
 const { getAllFilesFromDirectory, readFile, createDirectory } = require('./src/utils/filesystem');
 const { setInMemoreyRule } = require('./src/rule-manager');
 
@@ -39,7 +39,7 @@ const run = (proxyServer) => {
    // https://nodejs.org/api/http.html#http_server_timeout
    // The deafult is 2 min so I don't change it yet.
    // proxyServer.timeout = 120000;
-   
+
    // Clear all console from previous noise.
    process.stdout.write('\033c');
 
@@ -87,7 +87,7 @@ const onRequestRemote = (request, response) => {
 
    console.log(chalk.blue(`[TEST_ENV_SERVER] Response Body.....`));
 
-   response.writeHead(200, {'Content-Type': 'application/json'});
+   response.writeHead(200, { 'Content-Type': 'application/json' });
    return response.end(JSON.stringify({ person: 'Hello' }));
 }
 
@@ -104,3 +104,18 @@ remoteServer.listen(REMOTE_PORT, (err) => {
 
 
 run(http.createServer(onProxyRequest));
+
+const Request = require('./src/extensions/http/request');
+const Response = require('./src/extensions/http/response');
+
+var testServer = http.createServer(function(originalRequest, originalResponse) {
+   // Apply request/response extenstions.
+   const request = new Request(originalRequest);
+   const response = new Response(originalResponse);
+
+   return onProxyRequest2.call(this, request, response);
+});
+
+testServer.listen(3002, () => {
+   console.log('Running port 3002');
+});

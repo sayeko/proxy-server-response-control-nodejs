@@ -195,6 +195,31 @@ exports.onProxyRequest = (request, response) => {
    router(request.parsedURL.pathname, request, response);
 }
 
+exports.onProxyRequest2 = (request, response) => {
+
+   request.log('New Request Arrived...');
+
+   // Handle Cross Origin and Preflight requests from to allowed to send us requests from different domains.
+   if (request.get('method') === 'OPTIONS') {
+      return handleCrossOrigin(response)
+   }
+
+   // Handle ping request to check that we connected to proxy and server is on air.
+   if (request.get('headers')['x-proxy-ping']) {
+      response.set('statusCode') = 200;
+      return response.execute('end', 'pong!');
+   }
+
+   if (request.get('headers') && request.get('headers')['content-type'].indexOf('application/json') !== -1) {
+      return parseRequestBody(request, response)
+         .then(() => {
+            router(request.parsedURL.pathname, request, response);
+         })
+   }
+
+   router(request.parsedURL.pathname, request, response);
+}
+
 const router = (path, request, response) => {
    switch (path) {
       case '/rule':
