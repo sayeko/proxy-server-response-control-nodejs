@@ -51,7 +51,7 @@ const receiveTransformRequest = (transformationHandler) => {
 
 const sendProxyRequest = (endpoint, request, response) => {
 
-   requestLog(request, `Sending request to ${endpoint}`);
+   request.log(`Sending request to ${endpoint}`);
 
    const proxyRequest =
       request
@@ -73,7 +73,7 @@ const sendProxyRequest = (endpoint, request, response) => {
 
 const sendProxyRuleRequest = (endpoint, rule, request, response) => {
 
-   requestLog(request, `Sending request to ${endpoint}`);
+   request.log(`Sending request to ${endpoint}`);
 
    try {
       const requestSandbox = { request: request };
@@ -134,37 +134,31 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
 }
 
 const proxyFlow = (request, response) => {
-   try {
-      const mirrorUrl = request.parsedURL.query.mirrorUrl;
+   const mirrorUrl = request.parsedURL.query.mirrorUrl;
 
-      if (!mirrorUrl) {
-         throw createErrorResponse({ message: `Cannot proxy request without proxy mirror url: ${mirrorUrl ? mirrorUrl : 'N/A'}`, status: 400 });
-      }
-
-      const parsedMirrorUrl = url.parse(mirrorUrl, true);
-
-      const rulePathId = truncatePathUrlToPathId(parsedMirrorUrl.pathname);
-      const rule = getFromMemoreyRule(rulePathId);
-
-      // Only doing this for debug and information while debug.
-      if (!rule) {
-         requestLog(request, `Not found rule in memory that match ${rulePathId}`);
-      }
-
-      if (rule && rule.enable) {
-         requestLog(request, `Found rule in memory ${rule.rulePathId}`);
-
-         return sendProxyRuleRequest(mirrorUrl, rule, request, response);
-      }
-
-      requestLog(request, `Proxing the request to the remote server without transform it...`);
-
-      return sendProxyRequest(mirrorUrl, request, response);
-
-   } catch (error) {
-      response.statusCode = error.status;
-      response.end(JSON.stringify(error));
+   if (!mirrorUrl) {
+      return response.serverError({ status: 400, message: `Cannot proxy request without proxy mirror url: ${mirrorUrl ? mirrorUrl : 'N/A'}`, type: 'invalid.params' });
    }
+
+   const parsedMirrorUrl = url.parse(mirrorUrl, true);
+
+   const rulePathId = truncatePathUrlToPathId(parsedMirrorUrl.pathname);
+   const rule = getFromMemoreyRule(rulePathId);
+
+   // Only doing this for debug and information while debug.
+   if (!rule) {
+      request.log(`Not found rule in memory that match ${rulePathId}`);
+   }
+
+   if (rule && rule.enable) {
+      request.log(`Found rule in memory ${rule.rulePathId}`);
+
+      return sendProxyRuleRequest(mirrorUrl, rule, request, response);
+   }
+
+   request.log('Proxing the request to the remote server without transform it...');
+
+   return sendProxyRequest(mirrorUrl, request, response);
 }
 
 exports.onProxyRequest = (request, response) => {
