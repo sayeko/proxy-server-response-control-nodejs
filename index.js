@@ -119,8 +119,6 @@ var testServer = http.createServer(async function (originalRequest, originalResp
 
       await request.init([bodyParser]);
 
-      console.log('[PLUGIN::BODYPARSER]', request.body);
-
       return onProxyRequest2.call(this, request, response);
    } catch (error) {
       return response.serverError(error);

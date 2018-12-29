@@ -57,7 +57,7 @@ const sendProxyRequest = (endpoint, request, response) => {
       request
          .pipe(sendRequest(endpoint))
          .pipe(response)
-         
+
    proxyRequest
       .on('error', (error) => {
          console.error(chalk.error(`Error return from remote server ${error}`));
@@ -106,8 +106,8 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
 
                // Continue with the stream.
                transformedProxyRequestStream
-               .pipe(transformResponseStream)
-               .pipe(response);
+                  .pipe(transformResponseStream)
+                  .pipe(response);
             })
             .on('error', (url, obj, serverRequest, serverResponse) => {
                // Copy/Clone include status code headers from remote server.
@@ -201,20 +201,13 @@ exports.onProxyRequest2 = (request, response) => {
 
    // Handle Cross Origin and Preflight requests from to allowed to send us requests from different domains.
    if (request.get('method') === 'OPTIONS') {
-      return handleCrossOrigin(response)
+      return response.crossOrigin();
    }
 
    // Handle ping request to check that we connected to proxy and server is on air.
    if (request.get('headers')['x-proxy-ping']) {
-      response.set('statusCode') = 200;
+      response.set('statusCode', 200);
       return response.execute('end', 'pong!');
-   }
-
-   if (request.get('headers') && request.get('headers')['content-type'].indexOf('application/json') !== -1) {
-      return parseRequestBody(request, response)
-         .then(() => {
-            router(request.parsedURL.pathname, request, response);
-         })
    }
 
    router(request.parsedURL.pathname, request, response);

@@ -15,6 +15,22 @@ class Response extends Command {
 
 
    /**
+    * @param {*} customHeaders 
+    */
+   crossOrigin(customHeaders) {
+      const headers = {
+         'Access-Control-Allow-Origin': '*',
+         'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PUT',
+         'Access-Control-Allow-Headers': 'X-Requested-With, Accept, Origin, Referer, User-Agent, Content-Type, Authorization, X-GM-token'
+         /** add other headers too */
+      };
+   
+      this._original.writeHead(200, headers);
+      this._original.end();
+   }
+
+
+   /**
     * @param {*} error 
     */
    serverError(error) {

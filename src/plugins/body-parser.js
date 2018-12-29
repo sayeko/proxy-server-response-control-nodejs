@@ -28,7 +28,7 @@ const processBodyRequest = (originalRequest, cb) => {
       if (contentType === APPLICATION_FORM_URLENCODED) {
          queryData += data.toString();
       }
-   
+
       if (contentType === APPLICATION_JSON) {
          queryData += data;
       }
@@ -46,12 +46,13 @@ const processBodyRequest = (originalRequest, cb) => {
    });
 
    originalRequest.on('end', () => {
-      if (contentType === APPLICATION_JSON) {
-         JSONParser(queryData, cb);
-      }
-
-      if (contentType === APPLICATION_FORM_URLENCODED) {
-         formUrlEncodedParser(queryData, cb);
+      switch (contentType) {
+         case APPLICATION_JSON:
+            return JSONParser(queryData, cb);
+         case APPLICATION_FORM_URLENCODED:
+            return formUrlEncodedParser(queryData, cb);
+         default:
+            return cb(null, { name: 'body', result: null });
       }
    });
 }

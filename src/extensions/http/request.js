@@ -32,9 +32,7 @@ class Request extends Command {
 
       console.log('*'.repeat(logRequestetaLength));
       console.log(requestMeta);
-      console.log('\n');
       console.log(chalk.green(logMessage));
-      console.log('\n');
       console.log('*'.repeat(logRequestetaLength));
    }
 }
