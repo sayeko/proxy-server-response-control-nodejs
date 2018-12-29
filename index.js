@@ -107,13 +107,24 @@ run(http.createServer(onProxyRequest));
 
 const Request = require('./src/extensions/http/request');
 const Response = require('./src/extensions/http/response');
+const { bodyParser } = require('./src/plugins/body-parser');
 
-var testServer = http.createServer(function(originalRequest, originalResponse) {
-   // Apply request/response extenstions.
-   const request = new Request(originalRequest);
-   const response = new Response(originalResponse);
+var testServer = http.createServer(async function (originalRequest, originalResponse) {
+   let request, response;
+   
+   try {
+      // Apply request/response extenstions.
+      request = new Request(originalRequest);
+      response = new Response(originalResponse);
 
-   return onProxyRequest2.call(this, request, response);
+      await request.init([bodyParser]);
+
+      console.log('[PLUGIN::BODYPARSER]', request.body);
+
+      return onProxyRequest2.call(this, request, response);
+   } catch (error) {
+      return response.serverError(error);
+   }
 });
 
 testServer.listen(3002, () => {
