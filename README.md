@@ -1,6 +1,6 @@
-# Proxy-Server-Response-Control
-Proxy Server with UI dashboard to control result of response only with configure proxy mask id as identifier the main reason of this project is to give control of modify and mock response result of remote servers
+# CopyCat-Proxy-Transform-Request-Response
+NodeJS Proxy Server (Create,Update,Delete) Rule Path API.
+Transform remote request (Request, Response) via javascript lambda functions.
+Neat UI dashboard that currently open via our chrome extention.
 
-# Basic Architecture Flow
-
-![basic-flow](https://user-images.githubusercontent.com/23419176/49819380-f18ba400-fd7d-11e8-950e-bfe199fa6385.png)
+Should be in the near future as electron APP that also include installation of our proxy redirect browser extenstion.
