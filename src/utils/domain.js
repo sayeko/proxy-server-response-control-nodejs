@@ -31,15 +31,3 @@ exports.concatSubDomainsCamelCase = (host) => {
 
    return subDomainReference;
 }
-
-exports.handleCrossOrigin = (response) => {
-   const headers = {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PUT',
-      'Access-Control-Allow-Headers': 'X-Requested-With, Accept, Origin, Referer, User-Agent, Content-Type, Authorization, X-GM-token'
-      /** add other headers too */
-   };
-
-   response.writeHead(200, headers);
-   response.end();
-}

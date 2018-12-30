@@ -1,13 +1,9 @@
 const sendRequest = require('request');
 const url = require('url');
 const vm = require('vm');
-const uuidv1 = require('uuid/v1');
 const chalk = require('chalk');
-const { parseRequestBody, truncatePathUrlToPathId, createErrorResponse, requestLog } = require('./utils/request-helper');
-const { ruleAPI } = require('./rule-api');
-const { handleCrossOrigin } = require('./utils/domain');
+const { truncatePathUrlToPathId } = require('./utils/request-helper');
 const { getFromMemoreyRule } = require('./rule-manager');
-
 const { Transform } = require('stream');
 
 const receiveTransformRequest = (transformationHandler) => {
@@ -102,7 +98,7 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
       const transformedRequest = vm.runInNewContext(executionCode, requestSandbox, { timeout: 3000 });
       const transformResponse = receiveTransformRequest(rule.receiveTransformRespons);
 
-      transformedRequest.execute('pipe', sendRequest(endpoint))
+      const reqStream = transformedRequest.execute('pipe', sendRequest(endpoint))
          .on('response', (serverResponse) => {
             // Copy/Clone include status code headers from remote server.
             response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
@@ -121,12 +117,17 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
                })
                .pipe(response.ref);
          });
+
+      reqStream.on('end', function () {
+         request.log(`Sending back response to client from  ${endpoint}`);
+      });
+      
    } catch (error) {
       return response.serverError({ status: 400, message: error.message, type: 'proxy.failed' });
    }
 }
 
-const proxyFlow = (request, response) => {
+exports.proxyAPI = (request, response) => {
    const mirrorUrl = request.parsedURL.query.mirrorUrl;
 
    if (!mirrorUrl) {
@@ -152,59 +153,4 @@ const proxyFlow = (request, response) => {
    request.log('Proxing the request to the remote server without transform it...');
 
    return sendProxyRequest(mirrorUrl, request, response);
-}
-
-exports.onProxyRequest = (request, response) => {
-   // Parse the request url and save it on the current request instance.
-   request.parsedURL = url.parse(request.url, true);
-   request.id = uuidv1();
-
-   requestLog(request, 'New Request Arrived...');
-
-   // Handle Cross Origin and Preflight requests from to allowed to send us requests from different domains.
-   if (request.method === 'OPTIONS') {
-      return handleCrossOrigin(response)
-   }
-
-   // Handle ping request to check that we connected to proxy and server is on air.
-   if (request.headers['x-proxy-ping']) {
-      response.statusCode = 200;
-      return response.end('pong!');
-   }
-
-   if (request.headers['content-type'] && request.headers['content-type'].indexOf('application/json') !== -1) {
-      return parseRequestBody(request, response)
-         .then(() => {
-            router(request.parsedURL.pathname, request, response);
-         })
-   }
-
-   router(request.parsedURL.pathname, request, response);
-}
-
-exports.onProxyRequest2 = (request, response) => {
-
-   request.log('New Request Arrived...');
-
-   // Handle Cross Origin and Preflight requests from to allowed to send us requests from different domains.
-   if (request.get('method') === 'OPTIONS') {
-      return response.crossOrigin();
-   }
-
-   // Handle ping request to check that we connected to proxy and server is on air.
-   if (request.get('headers')['x-proxy-ping']) {
-      response.set('statusCode', 200);
-      return response.execute('end', 'pong!');
-   }
-
-   router(request.parsedURL.pathname, request, response);
-}
-
-const router = (path, request, response) => {
-   switch (path) {
-      case '/rule':
-         return ruleAPI(request, response);
-      default:
-         return proxyFlow(request, response);
-   }
 }

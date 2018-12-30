@@ -1,9 +1,12 @@
 const http = require('http');
+const Request = require('./src/extensions/http/request');
+const Response = require('./src/extensions/http/response');
+const { Router } = require('./src/router');
+const { bodyParser } = require('./src/plugins/body-parser');
 const path = require('path');
 const chalk = require('chalk');
 const { StringDecoder } = require('string_decoder');
 const decoder = new StringDecoder('utf8');
-const { onProxyRequest, onProxyRequest2 } = require('./src/proxy');
 const { getAllFilesFromDirectory, readFile, createDirectory } = require('./src/utils/filesystem');
 const { setInMemoreyRule } = require('./src/rule-manager');
 
@@ -35,7 +38,7 @@ const listen = (server) => {
    });
 }
 
-const run = (proxyServer) => {
+const run = async (proxyServer) => {
    // https://nodejs.org/api/http.html#http_server_timeout
    // The deafult is 2 min so I don't change it yet.
    // proxyServer.timeout = 120000;
@@ -47,39 +50,39 @@ const run = (proxyServer) => {
 
    const rulesPath = path.join(__dirname, 'rules');
 
-   createDirectory(rulesPath)
-      .then(getAllFilesFromDirectory)
-      .then((rulesFile) => {
-         let rules = rulesFile.children.map((ruleFile) => {
-            console.log(chalk.yellow(`Read rule file ${ruleFile}`));
+   try {
+      let rulesDirectoryPath = await createDirectory(rulesPath);
 
-            return readFile(path.join(rulesFile.parent, ruleFile));
-         });
+      let ruleFilesLocation = await getAllFilesFromDirectory(rulesDirectoryPath);
 
-         console.log(chalk.yellow('Finish to read all rules...'));
+      let ruleFilesBeforeBuffered = ruleFilesLocation.children.map(async (ruleFile) => {
+         console.log(chalk.yellow(`Read rule file ${ruleFile}`));
 
-         return Promise.all(rules);
-      })
-      .then((ruleBuffers) => {
-         const rules = ruleBuffers.map((ruleBuffer) => {
-            try {
-               return decoder.write(ruleBuffer);
-            } catch (error) {
-               console.error(chalk.red('Could not decode json rule file'), error);
-            }
-         });
-
-         rules.forEach((rule) => {
-            setInMemoreyRule(rule);
-         });
-
-         console.log(chalk.yellow('Allocate all rules into memory for flash query...'));
-
-         return listen(proxyServer);
-      })
-      .catch((error) => {
-         console.error(chalk.red('Error could not load the system.'), error);
+         return await readFile(path.join(ruleFilesLocation.parent, ruleFile));
       });
+
+      console.log(chalk.yellow('Finish to read all rules...'));
+
+      let ruleFileBuffers = await Promise.all(ruleFilesBeforeBuffered);
+
+      let rules = ruleFileBuffers.map((ruleBuffer) => {
+         try {
+            return decoder.write(ruleBuffer);
+         } catch (error) {
+            console.error(chalk.red('Could not decode json rule file'), error);
+         }
+      });
+
+      rules.forEach((rule) => {
+         setInMemoreyRule(rule);
+      });
+
+      console.log(chalk.yellow('Allocate all rules into memory for flash query...'));
+
+      return listen(proxyServer);
+   } catch (error) {
+      console.error(chalk.red('Error could not load the system.'), error);
+   }
 }
 
 const onRequestRemote = (request, response) => {
@@ -103,15 +106,9 @@ remoteServer.listen(REMOTE_PORT, (err) => {
 });
 
 
-run(http.createServer(onProxyRequest));
-
-const Request = require('./src/extensions/http/request');
-const Response = require('./src/extensions/http/response');
-const { bodyParser } = require('./src/plugins/body-parser');
-
-var testServer = http.createServer(async function (originalRequest, originalResponse) {
+run(http.createServer(async function (originalRequest, originalResponse) {
    let request, response;
-   
+
    try {
       // Apply request/response extenstions.
       request = new Request(originalRequest);
@@ -119,12 +116,23 @@ var testServer = http.createServer(async function (originalRequest, originalResp
 
       await request.init([bodyParser]);
 
-      return onProxyRequest2.call(this, request, response);
-   } catch (error) {
-      return response.serverError(error);
-   }
-});
+      request.log('New Request Arrived...');
 
-testServer.listen(3002, () => {
-   console.log('Running port 3002');
-});
+      // Handle Cross Origin and Preflight requests from to allowed to send us requests from different domains.
+      if (request.get('method') === 'OPTIONS') {
+         return response.crossOrigin();
+      }
+
+      // Handle ping request to check that we connected to proxy and server is on air.
+      if (request.get('headers')['x-proxy-ping']) {
+         response.set('statusCode', 200);
+         return response.execute('end', 'pong!');
+      }
+
+      // Invoke router.
+      Router(request.parsedURL.pathname, request, response);
+
+   } catch (error) {
+      return response.serverError({ status: 500, message: 'Something went wrong', type: 'server.error' });
+   }
+}));
