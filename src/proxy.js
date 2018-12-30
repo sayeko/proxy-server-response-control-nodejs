@@ -63,21 +63,14 @@ const sendProxyRequest = (endpoint, request, response) => {
 
    request.log(`Sending request to ${endpoint}`);
 
-   const proxyRequest =
-      request
-         .pipe(sendRequest(endpoint))
-         .pipe(response)
+   const proxyRequest = request.execute('pipe', sendRequest(endpoint)).pipe(response.ref);
 
    proxyRequest
       .on('error', (error) => {
          console.error(chalk.error(`Error return from remote server ${error}`));
-         response.end(JSON.stringify(error));
-
-         // Close the stream.
-         this.end();
       })
       .on('finish', () => {
-         requestLog(request, `Sending back response to client from  ${endpoint}`);
+         request.log(`Sending back response to client from  ${endpoint}`);
       });
 }
 
