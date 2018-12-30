@@ -12,6 +12,11 @@ class Request extends Command {
       this.parsedURL = url.parse(this._original.url, true);
    }
 
+
+   /**
+    * 
+    * @param {*} plugins 
+    */
    async init(plugins) {
       const invokedPlugins = plugins.map((plugin) => {
          return plugin.call(this, this._original);
@@ -25,6 +30,11 @@ class Request extends Command {
          });
    }
 
+
+   /**
+    * 
+    * @param {*} message 
+    */
    log(message) {
       let requestMeta = `[${new Date().toLocaleTimeString()}::${this.requestId}::${this._original.method}]`
       let logMessage = `PATH::${this._original.url} - ${message}`;

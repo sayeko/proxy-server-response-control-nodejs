@@ -13,7 +13,7 @@ class Response extends Command {
       super(originalResponse, 'RESPONSE');
    }
 
-
+   
    /**
     * @param {*} customHeaders 
     */

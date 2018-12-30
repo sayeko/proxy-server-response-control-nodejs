@@ -3,6 +3,10 @@ class Command {
        this._original = original;
        this._name = name || 'GENERAL';
     }
+
+    get ref() {
+       return this._original;
+    }
  
     set(prop, value) {
        this._original[prop] = value;

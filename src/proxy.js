@@ -27,7 +27,19 @@ const receiveTransformRequest = (transformationHandler) => {
 
             vm.createContext(responseSandbox);
 
-            const executionCode = `(function() { ${transformationHandler} if('function' !== typeof transform) { return responseResult } return transform(responseResult); })()`;
+            const executionCode = `
+                (function() { 
+                  // Dynamic rule transform function.
+                  ${transformationHandler} 
+                  
+                  // The transform function must be called transform.
+                  if('function' !== typeof transform) { 
+                     return responseResult;
+                   } 
+
+                  return transform(responseResult);
+                  })();
+                `;
 
             // Define 50 milliseconds timeout code execution.
             let transformedProxyResponse = vm.runInNewContext(executionCode, responseSandbox, { timeout: 3000 });
@@ -39,8 +51,6 @@ const receiveTransformRequest = (transformationHandler) => {
             this.push(transformedProxyResponse);
             this.push(null);
          } catch (ex) {
-            // We face an error return original remote response result.
-            this.push(data);
             err = ex;
          }
 
@@ -81,55 +91,45 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
       // Contextify the sandbox.
       vm.createContext(requestSandbox);
 
-      const executionCode = `(function() { ${rule.sendTransformRequest} if('function' !== typeof transform) { return request } return transform(request); })()`;
+      const executionCode = `
+         (function() {
+            // Dynamic rule transform function.
+            ${rule.sendTransformRequest}
+
+            // The transform function must be called transform.
+            if('function' !== typeof transform) { 
+               return request 
+            }
+
+            return transform(request); 
+         })();
+         `;
 
       // Define 50 milliseconds timeout code execution.
-      const transformedProxyRequest = vm.runInNewContext(executionCode, requestSandbox, { timeout: 3000 });
-      const transformResponseStream = receiveTransformRequest(rule.receiveTransformRespons);
+      const transformedRequest = vm.runInNewContext(executionCode, requestSandbox, { timeout: 3000 });
+      const transformResponse = receiveTransformRequest(rule.receiveTransformRespons);
 
-      transformResponseStream.on('error', function (error) {
-         console.error(chalk.red(`ERROR Could not transform response ${error}`));
+      transformedRequest.execute('pipe', sendRequest(endpoint))
+         .on('response', (serverResponse) => {
+            // Copy/Clone include status code headers from remote server.
+            response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
 
-         // End the pipe stream.
-         transformedProxyRequestStream.end();
+            // Continue with the stream.
+            serverResponse
+               .pipe(transformResponse)
+               .on('error', function (error) {
+                  console.error(chalk.red(`ERROR Could not transform response ${error}`));
 
-         response.statusCode = 500;
-         response.end();
-      });
+                  // We need to explicit write on the head because we wrote the headers already on the response
+                  // And we can't mutate the response stream statusCode after we wrote on the stream.
+                  response.execute('writeHead', 400, serverResponse.headers);
 
-      const transformedProxyRequestStream =
-         transformedProxyRequest
-            .pipe(sendRequest(endpoint))
-            .on('response', (serverResponse) => {
-               // Copy/Clone include status code headers from remote server.
-               response.writeHead(serverResponse.statusCode, serverResponse.headers);
-
-               // Continue with the stream.
-               transformedProxyRequestStream
-                  .pipe(transformResponseStream)
-                  .pipe(response);
-            })
-            .on('error', (url, obj, serverRequest, serverResponse) => {
-               // Copy/Clone include status code headers from remote server.
-               response.writeHead(serverResponse.statusCode, serverResponse.headers);
-
-               // In case of serve error, return the server error.
-               transformedProxyRequestStream.pipe(response);
-            })
-
-      transformedProxyRequestStream
-         .on('error', function (error) {
-            console.error(chalk.red(`Error Could not transform response ${error}`));
-
-            // Close the stream.
-            this.end();
-         })
-         .on('finish', () => {
-            requestLog(request, `Sending back response to client from ${endpoint} After Transformation`);
+                  return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
+               })
+               .pipe(response.ref);
          });
-
    } catch (error) {
-      throw createErrorResponse({ message: error.message, status: 400 });
+      return response.serverError({ status: 400, message: error.message, type: 'proxy.failed' });
    }
 }
 
