@@ -59,9 +59,17 @@ const sendProxyRequest = (endpoint, request, response) => {
 
    request.log(`Sending request to ${endpoint}`);
 
-   const proxyRequest = request.execute('pipe', sendRequest(endpoint)).pipe(response.ref);
+   const reqStream = request.pipe(sendRequest(endpoint));
 
-   proxyRequest
+   reqStream.on('response', (serverResponse) => {
+      // Copy/Clone include status code headers from remote server.
+      response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
+
+      // Continue with the stream.
+      serverResponse.pipe(response.ref);
+   });
+
+   reqStream
       .on('error', (error) => {
          console.error(chalk.error(`Error return from remote server ${error}`));
       })
@@ -98,30 +106,31 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
       const transformedRequest = vm.runInNewContext(executionCode, requestSandbox, { timeout: 3000 });
       const transformResponse = receiveTransformRequest(rule.receiveTransformRespons);
 
-      const reqStream = transformedRequest.execute('pipe', sendRequest(endpoint))
-         .on('response', (serverResponse) => {
-            // Copy/Clone include status code headers from remote server.
-            response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
+      const reqStream = transformedRequest.pipe(sendRequest(endpoint));
 
-            // Continue with the stream.
-            serverResponse
-               .pipe(transformResponse)
-               .on('error', function (error) {
-                  console.error(chalk.red(`ERROR Could not transform response ${error}`));
+      reqStream.on('response', (serverResponse) => {
+         // Copy/Clone include status code headers from remote server.
+         response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
 
-                  // We need to explicit write on the head because we wrote the headers already on the response
-                  // And we can't mutate the response stream statusCode after we wrote on the stream.
-                  response.execute('writeHead', 400, serverResponse.headers);
+         // Continue with the stream.
+         serverResponse
+            .pipe(transformResponse)
+            .on('error', function (error) {
+               console.error(chalk.red(`ERROR Could not transform response ${error}`));
 
-                  return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
-               })
-               .pipe(response.ref);
-         });
+               // We need to explicit write on the head because we wrote the headers already on the response
+               // And we can't mutate the response stream statusCode after we wrote on the stream.
+               response.execute('writeHead', 400, serverResponse.headers);
+
+               return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
+            })
+            .pipe(response.ref);
+      });
 
       reqStream.on('end', function () {
          request.log(`Sending back response to client from  ${endpoint}`);
       });
-      
+
    } catch (error) {
       return response.serverError({ status: 400, message: error.message, type: 'proxy.failed' });
    }

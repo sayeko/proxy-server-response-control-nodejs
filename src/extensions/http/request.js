@@ -31,6 +31,11 @@ class Request extends Command {
    }
 
 
+   pipe(destination) {
+      return this._original.pipe(destination);
+   }
+
+
    /**
     * 
     * @param {*} message 
