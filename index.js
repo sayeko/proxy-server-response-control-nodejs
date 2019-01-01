@@ -114,7 +114,16 @@ run(http.createServer(async function (originalRequest, originalResponse) {
       request = new Request(originalRequest);
       response = new Response(originalResponse);
 
-      await request.init([bodyParser]);
+      await request.init([
+         {
+            filter: function(req) {
+               // Do not apply the body parser plugin when proxy request happen.
+               return this.parsedURL.query.mirrorUrl === undefined;
+            },
+
+            plugin: bodyParser
+         }
+      ]);
 
       request.log('New Request Arrived...');
 

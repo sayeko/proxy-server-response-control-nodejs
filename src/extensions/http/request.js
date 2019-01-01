@@ -15,11 +15,15 @@ class Request extends Command {
 
    /**
     * 
-    * @param {*} plugins 
+    * @param {*} pluginModules 
     */
-   async init(plugins) {
-      const invokedPlugins = plugins.map((plugin) => {
-         return plugin.call(this, this._original);
+   async init(pluginModules) {
+      pluginModules = pluginModules.filter((pluginModule) => {
+         return 'function' === typeof pluginModule.filter ? pluginModule.filter.call(this, this._original) : false;
+      });
+
+      const invokedPlugins = pluginModules.map((pluginModule) => {
+         return pluginModule.plugin.call(this, this._original);
       });
 
       return Promise.all(invokedPlugins)

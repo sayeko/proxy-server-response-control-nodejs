@@ -25,11 +25,11 @@ const processBodyRequest = (originalRequest, cb) => {
    var contentType = originalRequest.headers['content-type'];
 
    originalRequest.on('data', (data) => {
-      if (contentType === APPLICATION_FORM_URLENCODED) {
+      if (contentType.indexOf(APPLICATION_FORM_URLENCODED) !== -1) {
          queryData += data.toString();
       }
 
-      if (contentType === APPLICATION_JSON) {
+      if (contentType.indexOf(APPLICATION_JSON) !== -1) {
          queryData += data;
       }
 

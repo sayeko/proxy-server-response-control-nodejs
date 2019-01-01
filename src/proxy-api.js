@@ -19,30 +19,7 @@ const receiveTransformRequest = (transformationHandler) => {
          let err = null;
 
          try {
-            const responseSandbox = { responseResult: data };
-
-            vm.createContext(responseSandbox);
-
-            const executionCode = `
-                (function() { 
-                  // Dynamic rule transform function.
-                  ${transformationHandler} 
-                  
-                  // The transform function must be called transform.
-                  if('function' !== typeof transform) { 
-                     return responseResult;
-                   } 
-
-                  return transform(responseResult);
-                  })();
-                `;
-
-            // Define 50 milliseconds timeout code execution.
-            let transformedProxyResponse = vm.runInNewContext(executionCode, responseSandbox, { timeout: 3000 });
-
-            if ('string' !== typeof transformedProxyResponse) {
-               transformedProxyResponse = JSON.stringify(transformedProxyResponse);
-            }
+            let transformedProxyResponse = executeTransformResponseFunction(transformationHandler, data);
 
             this.push(transformedProxyResponse);
             this.push(null);
@@ -55,6 +32,35 @@ const receiveTransformRequest = (transformationHandler) => {
    });
 }
 
+const executeTransformResponseFunction = (transformationHandler, data) => {
+   const responseSandbox = { responseResult: data };
+
+   vm.createContext(responseSandbox);
+
+   const executionCode = `
+       (function() { 
+         // Dynamic rule transform function.
+         ${transformationHandler} 
+         
+         // The transform function must be called transform.
+         if('function' !== typeof transform) { 
+            return responseResult;
+          } 
+
+         return transform(responseResult);
+         })();
+       `;
+
+   // Define 3000 milliseconds timeout code execution.
+   let transformedResponseResult = vm.runInNewContext(executionCode, responseSandbox, { timeout: 3000 });
+
+   if ('string' !== typeof transformedResponseResult) {
+      transformedResponseResult = JSON.stringify(transformedResponseResult);
+   }
+
+   return transformedResponseResult;
+}
+
 const sendProxyRequest = (endpoint, request, response) => {
 
    request.log(`Sending request to ${endpoint}`);
@@ -62,16 +68,18 @@ const sendProxyRequest = (endpoint, request, response) => {
    const reqStream = request.pipe(sendRequest(endpoint));
 
    reqStream.on('response', (serverResponse) => {
-      // Copy/Clone include status code headers from remote server.
-      response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
+         // Copy/Clone include status code headers from remote server.
+         response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
 
-      // Continue with the stream.
-      serverResponse.pipe(response.ref);
-   });
+         // Continue with the stream.
+         serverResponse.pipe(response.ref);
+      });
 
    reqStream
       .on('error', (error) => {
-         console.error(chalk.error(`Error return from remote server ${error}`));
+         console.error(`Error return from remote server ${error}`);
+
+         return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
       })
       .on('finish', () => {
          request.log(`Sending back response to client from  ${endpoint}`);
@@ -102,30 +110,49 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
          })();
          `;
 
-      // Define 50 milliseconds timeout code execution.
+      // Define 3000 milliseconds timeout code execution.
       const transformedRequest = vm.runInNewContext(executionCode, requestSandbox, { timeout: 3000 });
       const transformResponse = receiveTransformRequest(rule.receiveTransformRespons);
 
-      const reqStream = transformedRequest.pipe(sendRequest(endpoint));
+      let reqStream = null;
 
-      reqStream.on('response', (serverResponse) => {
-         // Copy/Clone include status code headers from remote server.
-         response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
+      if (rule.byPassServer) {
 
-         // Continue with the stream.
-         serverResponse
+         reqStream = transformedRequest
             .pipe(transformResponse)
             .on('error', function (error) {
                console.error(chalk.red(`ERROR Could not transform response ${error}`));
 
-               // We need to explicit write on the head because we wrote the headers already on the response
-               // And we can't mutate the response stream statusCode after we wrote on the stream.
-               response.execute('writeHead', 400, serverResponse.headers);
+               response.execute('writeHead', 400);
 
                return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
             })
             .pipe(response.ref);
-      });
+
+      } else {
+
+         reqStream = transformedRequest.pipe(sendRequest(endpoint));
+
+         reqStream.on('response', (serverResponse) => {
+            // Copy/Clone include status code headers from remote server.
+            response.execute('writeHead', serverResponse.statusCode, serverResponse.headers);
+
+            // Continue with the stream.
+            serverResponse
+               .pipe(transformResponse)
+               .on('error', function (error) {
+                  console.error(chalk.red(`ERROR Could not transform response ${error}`));
+
+                  // We need to explicit write on the head because we wrote the headers already on the response
+                  // And we can't mutate the response stream statusCode after we wrote on the stream.
+                  response.execute('writeHead', 400, serverResponse.headers);
+
+                  return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
+               })
+               .pipe(response.ref);
+
+         });
+      }
 
       reqStream.on('end', function () {
          request.log(`Sending back response to client from  ${endpoint}`);
