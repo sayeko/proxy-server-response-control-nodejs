@@ -8,9 +8,23 @@ const errorParseError = (response) => {
    response.writeHead(400, { 'Content-Type': 'text/plain' }).end();
 }
 
+
 class Response extends Command {
    constructor(originalResponse) {
       super(originalResponse, 'RESPONSE');
+   }
+
+
+   /**
+    * 
+    */
+   crossOriginHeaders() {
+      return  {
+         'Access-Control-Allow-Origin': '*',
+         'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PUT',
+         'Access-Control-Allow-Headers': 'X-Requested-With, Accept, Origin, Referer, User-Agent, Content-Type, Authorization, X-GM-token'
+         /** add other headers too */
+      };
    }
 
    
@@ -18,17 +32,20 @@ class Response extends Command {
     * @param {*} customHeaders 
     */
    crossOrigin(customHeaders) {
-      const headers = {
-         'Access-Control-Allow-Origin': '*',
-         'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PUT',
-         'Access-Control-Allow-Headers': 'X-Requested-With, Accept, Origin, Referer, User-Agent, Content-Type, Authorization, X-GM-token'
-         /** add other headers too */
-      };
-   
-      this._original.writeHead(200, headers);
+      this._original.writeHead(200, this.crossOriginHeaders());
       this._original.end();
    }
 
+
+   /**
+    * 
+    * @param {*} headers 
+    */
+   setHeaders(headers) {
+      Object.keys(headers).forEach((headerName) => {
+         this._original.setHeader(headerName, headers[headerName]);
+      });
+   }
 
    /**
     * @param {*} error 
@@ -42,7 +59,7 @@ class Response extends Command {
          case 'parse.error':
             return errorParseError(this._original);
          default:
-            this._original.statusCode = error.status || 500;
+            this._original.writeHead(error.status || 500, { 'Content-Type': 'application/json' });
             this._original.end(JSON.stringify(error));
       }
    }

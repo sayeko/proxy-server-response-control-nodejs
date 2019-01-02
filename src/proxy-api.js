@@ -79,7 +79,7 @@ const sendProxyRequest = (endpoint, request, response) => {
       .on('error', (error) => {
          console.error(`Error return from remote server ${error}`);
 
-         return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
+         return response.serverError({ status: 400, message: error.message, type: 'error.proxy' });
       })
       .on('finish', () => {
          request.log(`Sending back response to client from  ${endpoint}`);
@@ -117,18 +117,7 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
       let reqStream = null;
 
       if (rule.byPassServer) {
-
-         reqStream = transformedRequest
-            .pipe(transformResponse)
-            .on('error', function (error) {
-               console.error(chalk.red(`ERROR Could not transform response ${error}`));
-
-               response.execute('writeHead', 400);
-
-               return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
-            })
-            .pipe(response.ref);
-
+         return sendMockRequest(rule, request, response);
       } else {
 
          reqStream = transformedRequest.pipe(sendRequest(endpoint));
@@ -143,23 +132,38 @@ const sendProxyRuleRequest = (endpoint, rule, request, response) => {
                .on('error', function (error) {
                   console.error(chalk.red(`ERROR Could not transform response ${error}`));
 
-                  // We need to explicit write on the head because we wrote the headers already on the response
-                  // And we can't mutate the response stream statusCode after we wrote on the stream.
-                  response.execute('writeHead', 400, serverResponse.headers);
-
                   return response.serverError({ status: 400, message: error.message, type: 'invalid.transform.response' });
                })
                .pipe(response.ref);
 
          });
-      }
 
-      reqStream.on('end', function () {
-         request.log(`Sending back response to client from  ${endpoint}`);
-      });
+         reqStream.on('end', function () {
+            request.log(`Sending back response to client from  ${endpoint}`);
+         });
+      }
 
    } catch (error) {
       return response.serverError({ status: 400, message: error.message, type: 'proxy.failed' });
+   }
+}
+
+const sendMockRequest = (rule, request, response) => {
+   try {
+      let mockData = executeTransformResponseFunction(rule.receiveTransformRespons, {});
+
+      // Bulk copy headers to response stream.
+      // Copy request headers.
+      // Wired browser CROB trigger explanation how to fix it: https://stackoverflow.com/questions/50975296/chrome-corb-blocking-apigateway-lambda-request
+      response.setHeaders(Object.assign({}, request.get('headers'), response.crossOriginHeaders()));
+      
+      // Set the desired type of response data.
+      response.execute('setHeader','Content-Type', 'application/json');
+
+      // End the response and retrive the mock data after bypass real server endpoint.
+      response.execute('end', mockData);
+   } catch(error) {
+      return response.serverError({ status: 400, message: error.message, type: 'mock.response.error' });
    }
 }
 
