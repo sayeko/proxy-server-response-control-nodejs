@@ -4,102 +4,112 @@ const { createErrorResponse } = require('./utils/request-helper');
 const { writeFile, deleteFile } = require('./utils/filesystem');
 const { setInMemoreyRule, deleteFromMemoreyRule, getAllRulesFromMemorey, getFromMemoreyRule } = require('./rule-manager');
 
-const createNewRule = (newRule) => {
-    if ('undefined' === typeof newRule) {
-        return;
-    }
+const createNewRule = () => {
+   var defaultCodeFunctionRequest = 'function transform(request) {\n  return request; \n}';
+   var defaultCodeFunctionResponse = 'function transform(responseResult) {\n  return responseResult; \n}';
+   var rulePathId = `copycat.proxy.${Date.now()}`;
 
-    return Object.assign({ id: uuidv4(), pathUrl: newRule.rulePathId.replace(/\./g, '/'), }, newRule);
+   return {
+      id: uuidv4(),
+      rulePathId: rulePathId,
+      enable: true,
+      sendTransformRequest: defaultCodeFunctionRequest,
+      receiveTransformRespons: defaultCodeFunctionResponse,
+      pathUrl: rulePathId.replace(/\./g, '/'),
+      statusCode: 200,
+      byPassServer: false,
+   };
 }
 
 const updateRule = (rule) => {
-    if ('undefined' === typeof rule) {
-        return;
-    }
+   if ('undefined' === typeof rule) {
+      return;
+   }
 
-    return Object.assign(rule, { pathUrl: rule.rulePathId.replace(/\./g, '/') });
+   return Object.assign(rule, { pathUrl: rule.rulePathId.replace(/\./g, '/') });
 }
 
 exports.ruleAPI = async (request, response) => {
-    try {
-        const rootPath = path.dirname(require.main.filename || process.mainModule.filename);
-        const staticPath = 'rules';
+   try {
+      const rootPath = path.dirname(require.main.filename || process.mainModule.filename);
+      const staticPath = 'rules';
 
-        const rulesDirectory = path.join(rootPath, staticPath);
+      const rulesDirectory = path.join(rootPath, staticPath);
 
-        switch (request.get('method')) {
-            case 'POST':
-                let newRule = createNewRule(request.body.rule);
-                if (!newRule) {
-                    return response.serverError({ status: 400, message: 'Missing rule details', type: 'invalid.params' });
-                }
+      switch (request.get('method')) {
+         case 'POST':
+            let newRule = createNewRule();
+            if (!newRule) {
+               return response.serverError({ status: 400, message: 'Missing rule details', type: 'invalid.params' });
+            }
 
-                try {
-                    let createdNewRule = await writeFile(path.join(rootPath, staticPath, `${newRule.id}.json`), JSON.stringify(newRule));
+            try {
+               let createdNewRule = await writeFile(path.join(rootPath, staticPath, `${newRule.id}.json`), JSON.stringify(newRule));
 
-                    setInMemoreyRule(createdNewRule);
+               setInMemoreyRule(createdNewRule);
 
-                    response.set('statusCode', 201);
-                    response.execute('end', createdNewRule);
+               response.set('statusCode', 201);
+               response.execute('end', createdNewRule);
 
-                } catch (error) {
-                    return response.serverError({ status: 400, message: error.message, type: 'io.error' });
-                }
+            } catch (error) {
+               return response.serverError({ status: 400, message: error.message, type: 'io.error' });
+            }
 
-                break;
-            case 'GET':
-                let query = request.parsedURL.query;
+            break;
+         case 'GET':
+            let query = request.parsedURL.query;
 
-                if (query.id) {
-                    const rule = getFromMemoreyRule(query.id);
+            if (query.id) {
+               const rule = getFromMemoreyRule(query.id);
 
-                    response.set('statusCode', 200);
-                    response.execute('end', JSON.stringify(rule));
-                } else {
-                    const rules = getAllRulesFromMemorey();
+               response.set('statusCode', 200);
+               response.execute('end', JSON.stringify(rule));
+            } else {
+               const rules = getAllRulesFromMemorey();
 
-                    response.set('statusCode', 200);
-                    response.execute('end', JSON.stringify(rules));
-                }
-                break;
-            case 'DELETE':
-                const queryParams = request.parsedURL.query;
+               response.set('statusCode', 200);
+               response.execute('end', JSON.stringify(rules));
+            }
+            break;
+         case 'DELETE':
+            const queryParams = request.parsedURL.query;
 
-                try {
-                    await deleteFile(path.join(rulesDirectory, `${queryParams.id}.json`));
+            try {
+               await deleteFile(path.join(rulesDirectory, `${queryParams.id}.json`));
 
-                    deleteFromMemoreyRule(queryParams.id);
-                    
-                    response.set('statusCode', 204);
-                    response.execute('end');
-                } catch(error) {
-                    response.serverError({ status: 400, message: error.message, type: 'io.error' });
-                }
-                break;
-            case 'PUT':
-                if (!request.body.rule) {
-                    return response.serverError({ status: 400, message: 'Missing rule details', type: 'invalid.params' })
-                }
+               deleteFromMemoreyRule(queryParams.id);
 
-                try {
-                    const updatedRule = updateRule(request.body.rule);
+               response.set('statusCode', 204);
+               response.execute('end');
+            } catch (error) {
+               response.serverError({ status: 400, message: error.message, type: 'io.error' });
+            }
+            break;
+         case 'PUT':
+            if (!request.body.rule) {
+               return response.serverError({ status: 400, message: 'Missing rule details', type: 'invalid.params' })
+            }
 
-                    const updatedSavedRule = await writeFile(path.join(rulesDirectory, `${updatedRule.id}.json`), JSON.stringify(updatedRule));
+            try {
+               const updatedRule = updateRule(request.body.rule);
 
-                    setInMemoreyRule(updatedSavedRule);
+               const updatedSavedRule = await writeFile(path.join(rulesDirectory, `${updatedRule.id}.json`), JSON.stringify(updatedRule));
 
-                    response.set('statusCode', 202);
-                    response.execute('end' , updatedSavedRule);
+               deleteFromMemoreyRule(updatedRule.id);
+               setInMemoreyRule(updatedSavedRule);
 
-                } catch(error) {
-                    response.serverError({ status: 400, message: error.message, type: 'io.error' });
-                }
-                break;
-            default:
-                throw createErrorResponse({ message: 'Unsupported request method', status: 405 });
-        }
+               response.set('statusCode', 202);
+               response.execute('end', updatedSavedRule);
 
-    } catch (error) {
-        return response.serverError({ status: 400, message: error.message, type: 'unsupported.method' })
-    }
+            } catch (error) {
+               response.serverError({ status: 400, message: error.message, type: 'io.error' });
+            }
+            break;
+         default:
+            throw createErrorResponse({ message: 'Unsupported request method', status: 405 });
+      }
+
+   } catch (error) {
+      return response.serverError({ status: 400, message: error.message, type: 'unsupported.method' })
+   }
 }

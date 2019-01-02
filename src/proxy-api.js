@@ -160,6 +160,9 @@ const sendMockRequest = (rule, request, response) => {
       // Set the desired type of response data.
       response.execute('setHeader','Content-Type', 'application/json');
 
+      // Set the custom/mock status code.
+      response.set('statusCode', rule.statusCode || 200);
+
       // End the response and retrive the mock data after bypass real server endpoint.
       response.execute('end', mockData);
    } catch(error) {
