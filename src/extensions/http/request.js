@@ -1,5 +1,4 @@
 const Command = require('../base/command');
-
 const uuidv1 = require('uuid/v1');
 const url = require('url');
 const chalk = require('chalk');
@@ -9,7 +8,7 @@ class Request extends Command {
       super(originalRequest, 'REQUEST');
 
       this.requestId = uuidv1();
-      this.parsedURL = url.parse(this._original.url, true);
+      this.parsedURL = url.parse(originalRequest.url, true);
    }
 
 
@@ -19,11 +18,11 @@ class Request extends Command {
     */
    async init(pluginModules) {
       pluginModules = pluginModules.filter((pluginModule) => {
-         return 'function' === typeof pluginModule.filter ? pluginModule.filter.call(this, this._original) : false;
+         return 'function' === typeof pluginModule.filter ? pluginModule.filter.call(this, this) : false;
       });
 
       const invokedPlugins = pluginModules.map((pluginModule) => {
-         return pluginModule.plugin.call(this, this._original);
+         return pluginModule.plugin.call(this, this);
       });
 
       return Promise.all(invokedPlugins)

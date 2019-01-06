@@ -41,11 +41,17 @@ class Response extends Command {
     * 
     * @param {*} headers 
     */
-   setHeaders(headers) {
+   setHeaders(headers, exclude) {
       Object.keys(headers).forEach((headerName) => {
+         // Do not add exclude headers.
+         if (exclude && exclude[headerName] !== undefined) {
+            return;
+         }
+
          this._original.setHeader(headerName, headers[headerName]);
       });
    }
+
 
    /**
     * @param {*} error 

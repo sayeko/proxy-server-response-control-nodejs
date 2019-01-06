@@ -3,6 +3,7 @@ const Request = require('./src/extensions/http/request');
 const Response = require('./src/extensions/http/response');
 const { Router } = require('./src/router');
 const { bodyParser } = require('./src/plugins/body-parser');
+const { mirrorUrlParser } = require('./src/plugins/mirrorurl-parser');
 const path = require('path');
 const chalk = require('chalk');
 const { StringDecoder } = require('string_decoder');
@@ -116,12 +117,20 @@ run(http.createServer(async function (originalRequest, originalResponse) {
 
       await request.init([
          {
-            filter: function(req) {
+            filter: function (req) {
                // Do not apply the body parser plugin when proxy request happen.
-               return this.parsedURL.query.mirrorUrl === undefined;
+               return req.parsedURL.query.mirrorUrl === undefined;
             },
 
             plugin: bodyParser
+         },
+         {
+            filter: function (req) {
+               // Do not apply the mirror url parser when is not exist.
+               return req.parsedURL.query.mirrorUrl !== undefined;
+            },
+
+            plugin: mirrorUrlParser
          }
       ]);
 
@@ -142,6 +151,7 @@ run(http.createServer(async function (originalRequest, originalResponse) {
       Router(request.parsedURL.pathname, request, response);
 
    } catch (error) {
+      console.error(error.message);
       return response.serverError({ status: 500, message: 'Something went wrong', type: 'server.error' });
    }
 }));

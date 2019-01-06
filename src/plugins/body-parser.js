@@ -20,8 +20,9 @@ const JSONParser = (data, cb) => {
    cb(null, { name: 'body', result: body });
 }
 
-const processBodyRequest = (originalRequest, cb) => {
+const processBodyRequest = (request, cb) => {
    var queryData = "";
+   var originalRequest = request.ref;
    var contentType = originalRequest.headers['content-type'];
 
    originalRequest.on('data', (data) => {
