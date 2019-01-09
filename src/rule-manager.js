@@ -1,7 +1,7 @@
 const chalk = require('chalk');
 
-inMemoreyRulesByPathId = new Map();
-inMemoreyRuleIdPointToRulePathId = new Map();
+const inMemoreyRulesByPathId = new Map();
+const inMemoreyRuleIdPointToRulePathId = new Map();
 
 exports.setInMemoreyRule = (rule) => {
     // We always set in memorey after we write to file so we except to get String JSON.
