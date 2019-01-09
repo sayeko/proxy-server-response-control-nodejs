@@ -1,11 +1,5 @@
 const path = require('path');
 
-exports.createErrorResponse = (error) => {
-   return Object.assign({}, {
-      message: 'Server Error',
-      status: 500
-   }, error);
-}
 
 exports.truncatePathUrlToPathId = (url) => {
    if ('string' !== typeof url) {

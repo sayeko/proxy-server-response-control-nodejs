@@ -1,8 +1,8 @@
 const path = require('path');
 const uuidv4 = require('uuid/v4');
-const { createErrorResponse } = require('./utils/request-helper');
-const { writeFile, deleteFile } = require('./utils/filesystem');
-const { setInMemoreyRule, deleteFromMemoreyRule, getAllRulesFromMemorey, getFromMemoreyRule } = require('./rule-manager');
+const { createErrorResponse } = require('../utils/request-helper');
+const { writeFile, deleteFile } = require('../utils/filesystem');
+const { setInMemoreyRule, deleteFromMemoreyRule, getAllRulesFromMemorey, getFromMemoreyRule } = require('../services/rule-service');
 
 const createNewRule = () => {
    var defaultCodeFunctionRequest = 'function transform(request) {\n  return request; \n}';
@@ -48,29 +48,24 @@ exports.ruleAPI = async (request, response) => {
 
                setInMemoreyRule(createdNewRule);
 
-               response.set('statusCode', 201);
-               response.execute('end', createdNewRule);
+               return response.sendOK(createdNewRule, 201);
 
             } catch (error) {
                return response.serverError({ status: 400, message: error.message, type: 'io.error' });
             }
-
-            break;
          case 'GET':
             let query = request.parsedURL.query;
 
             if (query.id) {
                const rule = getFromMemoreyRule(query.id);
 
-               response.set('statusCode', 200);
-               response.execute('end', JSON.stringify(rule));
+               return response.sendOK(rule);
             } else {
                const rules = getAllRulesFromMemorey();
 
-               response.set('statusCode', 200);
-               response.execute('end', JSON.stringify(rules));
+               return response.sendOK(rules);
             }
-            break;
+
          case 'DELETE':
             const queryParams = request.parsedURL.query;
 
@@ -79,12 +74,10 @@ exports.ruleAPI = async (request, response) => {
 
                deleteFromMemoreyRule(queryParams.id);
 
-               response.set('statusCode', 204);
-               response.execute('end');
+               return response.sendOK('', 204);
             } catch (error) {
-               response.serverError({ status: 400, message: error.message, type: 'io.error' });
+               return response.serverError({ status: 400, message: error.message, type: 'io.error' });
             }
-            break;
          case 'PUT':
             if (!request.body.rule) {
                return response.serverError({ status: 400, message: 'Missing rule details', type: 'invalid.params' })
@@ -98,18 +91,16 @@ exports.ruleAPI = async (request, response) => {
                deleteFromMemoreyRule(updatedRule.id);
                setInMemoreyRule(updatedSavedRule);
 
-               response.set('statusCode', 202);
-               response.execute('end', updatedSavedRule);
+               return response.sendOK(updatedSavedRule, 202);
 
             } catch (error) {
-               response.serverError({ status: 400, message: error.message, type: 'io.error' });
+               return response.serverError({ status: 400, message: error.message, type: 'io.error' });
             }
-            break;
          default:
-            throw createErrorResponse({ message: 'Unsupported request method', status: 405 });
+            throw { message: 'Unsupported request method', status: 405 };
       }
 
    } catch (error) {
-      return response.serverError({ status: 400, message: error.message, type: 'unsupported.method' })
+      return response.serverError({ status: error.status || 400, message: error.message, type: 'unsupported.method' })
    }
 }

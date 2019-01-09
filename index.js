@@ -9,7 +9,7 @@ const chalk = require('chalk');
 const { StringDecoder } = require('string_decoder');
 const decoder = new StringDecoder('utf8');
 const { getAllFilesFromDirectory, readFile, createDirectory } = require('./src/utils/filesystem');
-const { setInMemoreyRule } = require('./src/rule-manager');
+const { setInMemoreyRule } = require('./src/services/rule-service');
 
 const PROXY_PORT = 3000;
 const REMOTE_PORT = 3001;

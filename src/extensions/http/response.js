@@ -16,10 +16,21 @@ class Response extends Command {
 
 
    /**
+    * @param {*} result 
+    * @param {*} status 
+    */
+   sendOK(result, status) {
+      this._original.statusCode = status || 200;
+
+      'string' === typeof result ? this._original.end(result) : this._original.end(JSON.stringify(result));
+   }
+
+
+   /**
     * 
     */
    crossOriginHeaders() {
-      return  {
+      return {
          'Access-Control-Allow-Origin': '*',
          'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS, POST, PUT',
          'Access-Control-Allow-Headers': 'X-Requested-With, Accept, Origin, Referer, User-Agent, Content-Type, Authorization, X-GM-token'
@@ -27,7 +38,7 @@ class Response extends Command {
       };
    }
 
-   
+
    /**
     * @param {*} customHeaders 
     */

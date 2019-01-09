@@ -3,8 +3,8 @@ const url = require('url');
 const vm = require('vm');
 const chalk = require('chalk');
 const concat = require('concat-stream');
-const { truncatePathUrlToPathId } = require('./utils/request-helper');
-const { getFromMemoreyRule } = require('./rule-manager');
+const { truncatePathUrlToPathId } = require('../utils/request-helper');
+const { getFromMemoreyRule } = require('../services/rule-service');
 
 const vmTransformHandler = (transformationHandler, data) => {
    let formattedData = null;
